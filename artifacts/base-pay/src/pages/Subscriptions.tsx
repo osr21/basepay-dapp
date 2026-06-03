@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
 import { isAddress, decodeEventLog } from "viem";
 import {
@@ -53,25 +53,37 @@ export default function SubscriptionsPage() {
   const { writeContract: writeSub, data: subTxHash, isPending: isSubPending, error: subError, reset } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: confirmed, data: receipt } = useWaitForTransactionReceipt({ hash: subTxHash });
 
-  if (confirmed && step === "subscribing" && subTxHash && receipt) {
-    let id: string | undefined;
-    for (const log of receipt.logs) {
-      try {
-        const decoded = decodeEventLog({ abi: SUBSCRIPTION_MANAGER_ABI, data: log.data, topics: log.topics });
-        if (decoded.eventName === "Subscribed") {
-          id = (decoded.args as { id: bigint }).id.toString();
-          break;
-        }
-      } catch {}
+  // When subscribe tx confirms, extract the subscription ID and advance to done
+  useEffect(() => {
+    if (confirmed && step === "subscribing" && subTxHash && receipt) {
+      let id: string | undefined;
+      for (const log of receipt.logs) {
+        try {
+          const decoded = decodeEventLog({ abi: SUBSCRIPTION_MANAGER_ABI, data: log.data, topics: log.topics });
+          if (decoded.eventName === "Subscribed") {
+            id = (decoded.args as { id: bigint }).id.toString();
+            break;
+          }
+        } catch {}
+      }
+      setSubId(id);
+      setTxHash(subTxHash);
+      setStep("done");
     }
-    setSubId(id);
-    setTxHash(subTxHash);
-    setStep("done");
-  }
+  }, [confirmed, subTxHash, receipt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (approveConfirmed && step === "approving") {
-    setStep("idle");
-  }
+  // When approval confirms, automatically fire the subscribe transaction — no manual refresh needed
+  useEffect(() => {
+    if (approveConfirmed && step === "approving") {
+      setStep("subscribing");
+      writeSub({
+        address: SUB_MANAGER_ADDRESS,
+        abi: SUBSCRIPTION_MANAGER_ABI,
+        functionName: "subscribe",
+        args: [USDC_ADDRESS, payee as `0x${string}`, amountRaw, interval.seconds, memo],
+      });
+    }
+  }, [approveConfirmed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleApprove() {
     setStep("approving");

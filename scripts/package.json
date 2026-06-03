@@ -9,6 +9,7 @@
     "deploy-batch-pay": "tsx ./src/deploy-batch-pay.ts",
     "deploy-escrow": "tsx ./src/deploy-escrow.ts",
     "deploy-subscription-manager": "tsx ./src/deploy-subscription-manager.ts",
+    "push-github-docs": "tsx ./src/push-github-docs.ts",
     "verify-contracts": "tsx ./src/verify-contracts.ts",
     "wallet-info": "tsx ./src/wallet-info.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

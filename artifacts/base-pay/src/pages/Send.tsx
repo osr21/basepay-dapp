@@ -23,7 +23,7 @@ export default function SendPage() {
 
   const { data: contacts } = useListContacts(
     { ownerAddress: address },
-    { query: { enabled: !!address } }
+    { query: { enabled: !!address, queryKey: ["listContacts", address] } }
   );
   const { data: appConfig } = useGetAppConfig();
 

@@ -9,7 +9,7 @@ export default function PayPage() {
   const { address, isConnected } = useAccount();
 
   const { data: req, isLoading, error } = useGetPaymentRequest(id, {
-    query: { enabled: !!id },
+    query: { enabled: !!id, queryKey: ["getPaymentRequest", id] },
   });
 
   const { mutate: updateRequest } = useUpdatePaymentRequest();

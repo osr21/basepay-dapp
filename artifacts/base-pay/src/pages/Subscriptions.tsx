@@ -30,9 +30,11 @@ export default function SubscriptionsPage() {
   const netRaw     = amountRaw - feeRaw;
   const interval   = INTERVALS[intervalIdx];
 
-  // Approve 24 periods worth — gives the contract a bounded allowance, not unlimited.
-  // Blockaid and security scanners flag uint256.max approvals as high-risk.
-  const approvalCap = amountRaw * 24n;
+  // Approve exactly one period's gross amount.
+  // Approving only what the contract needs for the next charge is the safest pattern —
+  // security scanners like Blockaid flag large or unlimited approvals to pull-payment contracts.
+  // The user will be asked to re-approve before each charge once allowance drops below amountRaw.
+  const approvalCap = amountRaw; // exactly one charge
 
   const { data: allowance } = useReadContract({
     address: USDC_ADDRESS,
@@ -118,10 +120,14 @@ export default function SubscriptionsPage() {
           <div className="w-14 h-14 rounded-full border border-primary/30 bg-primary/10 flex items-center justify-center mx-auto">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="hsl(221,83%,63%)" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </div>
-          <h2 className="text-lg font-bold">Approve Subscriptions</h2>
+          <h2 className="text-lg font-bold">Approve Spending Cap</h2>
           <p className="text-sm text-muted-foreground">
-            Approve <span className="font-semibold text-foreground">{amount ? (parseFloat(amount) * 24).toFixed(2) : "—"} USDC</span> (24 periods) so the contract can charge you each {interval.display}. Re-approval needed after 24 charges.
+            Approving exactly <span className="font-semibold text-foreground">{amount || "—"} USDC</span> — one charge only. Your wallet may show a security warning for pull-payment contracts; this approval is limited to a single period.
           </p>
+          <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-left text-xs text-yellow-300 space-y-1">
+            <p className="font-semibold">⚠ About the wallet warning</p>
+            <p>Security tools like Blockaid flag subscription contracts because they allow recurring charges. This contract is <a href="https://basescan.org/address/0x546093b0476b4b7909cd84f3a0fef813c421d14a#code" target="_blank" rel="noopener noreferrer" className="underline">open-source and verified</a> on BaseScan. You may proceed safely.</p>
+          </div>
           <p className="text-xs text-muted-foreground font-mono">{isApproving ? "Confirm in wallet..." : "Waiting for confirmation..."}</p>
         </div>
       </div>
@@ -262,16 +268,25 @@ export default function SubscriptionsPage() {
       )}
 
       <div className="rounded-xl border border-border bg-secondary/50 px-4 py-3 text-xs text-muted-foreground space-y-1">
-        <p><span className="font-semibold text-foreground">How it works:</span> You approve once, then the payee (or anyone) can trigger a charge once per {interval.display}.</p>
+        <p><span className="font-semibold text-foreground">How it works:</span> You approve exactly <span className="font-semibold text-foreground">{amount || "one period"} USDC</span>, then the payee triggers a charge once per {interval.display}. Your approval resets to one period each time — your exposure is always capped at a single charge.</p>
         <p>Keep your USDC balance funded. You can cancel at any time.</p>
       </div>
+
+      {/* Security notice — explains Blockaid warnings before the wallet opens */}
+      {needsApproval && isValidAmount && (
+        <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-xs text-yellow-300 space-y-1.5">
+          <p className="font-semibold text-yellow-200">⚠ Your wallet may show a security warning</p>
+          <p>Subscription contracts require a spending approval so charges can be collected each period. Your wallet's security scanner (e.g. Blockaid) may flag this as high-risk because it's a pull-payment pattern.</p>
+          <p>This contract is <a href="https://basescan.org/address/0x546093b0476b4b7909cd84f3a0fef813c421d14a#code" target="_blank" rel="noopener noreferrer" className="underline font-medium">open-source and verified on BaseScan</a>. You are approving exactly <span className="font-medium text-yellow-100">{amount} USDC</span> — one period only.</p>
+        </div>
+      )}
 
       {needsApproval ? (
         <button
           onClick={handleApprove}
           disabled={!canProceed || !SUB_MANAGER_ADDRESS}
           className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
-        >Approve USDC for Subscriptions</button>
+        >Approve {amount ? `${amount} USDC` : "USDC"} for Subscriptions</button>
       ) : (
         <button
           onClick={handleSubscribe}

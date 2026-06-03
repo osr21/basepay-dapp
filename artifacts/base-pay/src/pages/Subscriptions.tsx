@@ -30,7 +30,9 @@ export default function SubscriptionsPage() {
   const netRaw     = amountRaw - feeRaw;
   const interval   = INTERVALS[intervalIdx];
 
-  const MAX_ALLOWANCE = 2n ** 256n - 1n;
+  // Approve 24 periods worth — gives the contract a bounded allowance, not unlimited.
+  // Blockaid and security scanners flag uint256.max approvals as high-risk.
+  const approvalCap = amountRaw * 24n;
 
   const { data: allowance } = useReadContract({
     address: USDC_ADDRESS,
@@ -40,6 +42,7 @@ export default function SubscriptionsPage() {
     query: { enabled: !!address && !!SUB_MANAGER_ADDRESS },
   });
 
+  // Re-approve when remaining allowance falls below one full charge
   const needsApproval = allowance !== undefined && amountRaw > 0n && allowance < amountRaw;
 
   const { writeContract: writeApprove, data: approveTxHash, isPending: isApproving } = useWriteContract();
@@ -74,7 +77,7 @@ export default function SubscriptionsPage() {
       address: USDC_ADDRESS,
       abi: USDC_ABI,
       functionName: "approve",
-      args: [SUB_MANAGER_ADDRESS, MAX_ALLOWANCE],
+      args: [SUB_MANAGER_ADDRESS, approvalCap],
     });
   }
 
@@ -116,7 +119,9 @@ export default function SubscriptionsPage() {
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="hsl(221,83%,63%)" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </div>
           <h2 className="text-lg font-bold">Approve Subscriptions</h2>
-          <p className="text-sm text-muted-foreground">Grant unlimited USDC allowance so the contract can charge you each period.</p>
+          <p className="text-sm text-muted-foreground">
+            Approve <span className="font-semibold text-foreground">{amount ? (parseFloat(amount) * 24).toFixed(2) : "—"} USDC</span> (24 periods) so the contract can charge you each {interval.display}. Re-approval needed after 24 charges.
+          </p>
           <p className="text-xs text-muted-foreground font-mono">{isApproving ? "Confirm in wallet..." : "Waiting for confirmation..."}</p>
         </div>
       </div>

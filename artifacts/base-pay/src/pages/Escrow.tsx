@@ -6,6 +6,7 @@ import {
   parseUSDC, formatUSDC, truncateAddress,
 } from "@/lib/wagmi";
 import { WalletButton } from "@/components/Layout";
+import { BlockaidWarning } from "@/components/BlockaidWarning";
 
 const ESCROW_ADDRESS = (import.meta.env.VITE_ESCROW_ADDRESS ?? "") as `0x${string}`;
 
@@ -108,15 +109,21 @@ export default function EscrowPage() {
 
   if (step === "approving") {
     return (
-      <div className="max-w-md mx-auto">
-        <div className="rounded-2xl border border-primary/20 bg-card p-8 text-center space-y-4">
-          <div className="w-14 h-14 rounded-full border border-primary/30 bg-primary/10 flex items-center justify-center mx-auto">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="hsl(221,83%,63%)" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <h2 className="text-lg font-bold">Approve Escrow</h2>
-          <p className="text-sm text-muted-foreground">Allow the Escrow contract to hold your USDC.</p>
-          <p className="text-xs text-muted-foreground font-mono">{isApproving ? "Confirm in wallet..." : "Waiting for confirmation..."}</p>
+      <div className="max-w-md mx-auto space-y-4">
+        <div>
+          <h1 className="text-xl font-bold">Escrow</h1>
+          <p className="text-sm text-muted-foreground">Step 1 of 2 — Approve Escrow contract</p>
         </div>
+        <BlockaidWarning
+          contractName="Escrow"
+          contractAddress="0x5b3241a47acfda41f15dfd7260339e2a88d52318"
+          proceedLabel={isApproving ? "Confirm in wallet..." : "Approve in Wallet"}
+          onProceed={() => {}}
+          onCancel={handleReset}
+        />
+        {isApproving && (
+          <p className="text-center text-xs text-muted-foreground font-mono">Waiting for wallet confirmation...</p>
+        )}
       </div>
     );
   }

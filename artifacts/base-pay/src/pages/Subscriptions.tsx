@@ -6,6 +6,7 @@ import {
   parseUSDC, formatUSDC, truncateAddress,
 } from "@/lib/wagmi";
 import { WalletButton } from "@/components/Layout";
+import { BlockaidWarning } from "@/components/BlockaidWarning";
 
 const SUB_MANAGER_ADDRESS = (import.meta.env.VITE_SUBSCRIPTION_MANAGER_ADDRESS ?? "") as `0x${string}`;
 
@@ -127,21 +128,24 @@ export default function SubscriptionsPage() {
 
   if (step === "approving") {
     return (
-      <div className="max-w-md mx-auto">
-        <div className="rounded-2xl border border-primary/20 bg-card p-8 text-center space-y-4">
-          <div className="w-14 h-14 rounded-full border border-primary/30 bg-primary/10 flex items-center justify-center mx-auto">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="hsl(221,83%,63%)" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <h2 className="text-lg font-bold">Approve Spending Cap</h2>
-          <p className="text-sm text-muted-foreground">
-            Approving exactly <span className="font-semibold text-foreground">{amount || "—"} USDC</span> — one charge only. Your wallet may show a security warning for pull-payment contracts; this approval is limited to a single period.
-          </p>
-          <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-left text-xs text-yellow-300 space-y-1">
-            <p className="font-semibold">⚠ About the wallet warning</p>
-            <p>Security tools like Blockaid flag subscription contracts because they allow recurring charges. This contract is <a href="https://basescan.org/address/0x546093b0476b4b7909cd84f3a0fef813c421d14a#code" target="_blank" rel="noopener noreferrer" className="underline">open-source and verified</a> on BaseScan. You may proceed safely.</p>
-          </div>
-          <p className="text-xs text-muted-foreground font-mono">{isApproving ? "Confirm in wallet..." : "Waiting for confirmation..."}</p>
+      <div className="max-w-md mx-auto space-y-4">
+        <div>
+          <h1 className="text-xl font-bold">Subscriptions</h1>
+          <p className="text-sm text-muted-foreground">Step 1 of 2 — Approve spending cap</p>
         </div>
+        <div className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+          Approving exactly <span className="font-semibold text-foreground">{amount || "—"} USDC</span> — one charge only. Your exposure is capped at a single period.
+        </div>
+        <BlockaidWarning
+          contractName="SubscriptionManager"
+          contractAddress="0x546093b0476b4b7909cd84f3a0fef813c421d14a"
+          proceedLabel={isApproving ? "Confirm in wallet..." : "Approve in Wallet"}
+          onProceed={() => {}}
+          onCancel={handleReset}
+        />
+        {isApproving && (
+          <p className="text-center text-xs text-muted-foreground font-mono">Waiting for wallet confirmation...</p>
+        )}
       </div>
     );
   }

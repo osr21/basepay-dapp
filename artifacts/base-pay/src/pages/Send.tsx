@@ -8,8 +8,9 @@ import {
   parseUSDC, truncateAddress, calcFee,
 } from "@/lib/wagmi";
 import { WalletButton } from "@/components/Layout";
+import { BlockaidWarning } from "@/components/BlockaidWarning";
 
-type SendStep = "idle" | "fee" | "payment" | "done";
+type SendStep = "idle" | "warn" | "fee" | "payment" | "done";
 
 export default function SendPage() {
   const { address, isConnected } = useAccount();
@@ -20,6 +21,8 @@ export default function SendPage() {
   const [step, setStep]           = useState<SendStep>("idle");
   const [feeTxHash, setFeeTxHash] = useState<`0x${string}` | undefined>();
   const [mainTxHash, setMainTxHash] = useState<`0x${string}` | undefined>();
+  // Router is opt-in; direct transfer is the default to avoid wallet security warnings
+  const [routerEnabled, setRouterEnabled] = useState(false);
 
   const { data: contacts } = useListContacts(
     { ownerAddress: address },
@@ -30,7 +33,7 @@ export default function SendPage() {
   const feeBps        = appConfig?.feeBps ?? 30;
   const feeCollector  = (appConfig?.feeCollectorAddress ?? FEE_COLLECTOR_ADDRESS) as `0x${string}`;
   const routerAddr    = (appConfig?.routerAddress ?? (HAS_ROUTER ? ROUTER_ADDRESS : "")) as `0x${string}` | "";
-  const useRouter     = routerAddr.startsWith("0x") && routerAddr.length === 42;
+  const useRouter     = routerEnabled && routerAddr.startsWith("0x") && routerAddr.length === 42;
 
   const { fee, net } = calcFee(amount);
   const feePercent   = (feeBps / 100).toFixed(2);
@@ -94,21 +97,25 @@ export default function SendPage() {
   const isValidAddress = isAddress(to);
   const isValidAmount  = parseFloat(amount) > 0;
   const isBusy         = isApproving || isFeePending || isFeeConfirming || isMainPending || isMainConfirming;
-  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle";
+  const canSend        = isValidAddress && isValidAmount && !isBusy && (step === "idle" || step === "warn");
+
+  function doApprove() {
+    setStep("fee");
+    writeApprove({
+      address: USDC_ADDRESS,
+      abi: USDC_ABI,
+      functionName: "approve",
+      args: [routerAddr as `0x${string}`, parseUSDC(amount)],
+    });
+  }
 
   function handleSend() {
     if (!canSend) return;
-    setStep("fee");
 
     if (useRouter) {
       if (needsApproval) {
-        // Approve first, then user will click again
-        writeApprove({
-          address: USDC_ADDRESS,
-          abi: USDC_ABI,
-          functionName: "approve",
-          args: [routerAddr as `0x${string}`, parseUSDC(amount)],
-        });
+        // Show Blockaid warning BEFORE triggering the wallet approval popup
+        setStep("warn");
         return;
       }
       setStep("payment");
@@ -118,7 +125,11 @@ export default function SendPage() {
         functionName: "send",
         args: [USDC_ADDRESS, to as `0x${string}`, parseUSDC(amount), memo],
       });
-    } else {
+      return;
+    }
+
+    setStep("fee");
+    {
       // Two-step: fee transfer first
       const feeAmount = parseUSDC(fee);
       if (feeAmount > 0n) {
@@ -156,8 +167,27 @@ export default function SendPage() {
     );
   }
 
-  // ── Approve pending ────────────────────────────────────────────────────────
-  if (step === "fee" && useRouter && needsApproval && !approveConfirmed) {
+  // ── Blockaid pre-warning ───────────────────────────────────────────────────
+  if (step === "warn") {
+    return (
+      <div className="max-w-md mx-auto space-y-4">
+        <div>
+          <h1 className="text-xl font-bold">Send USDC</h1>
+          <p className="text-sm text-muted-foreground">Step 1 of 2 — Approve router</p>
+        </div>
+        <BlockaidWarning
+          contractName="BasePayRouter"
+          contractAddress="0x2d7ba7ed34f8fa16fe4d0d11b51306dc753812c8"
+          proceedLabel="Approve Router in Wallet"
+          onProceed={doApprove}
+          onCancel={() => setStep("idle")}
+        />
+      </div>
+    );
+  }
+
+  // ── Approve pending (wallet open) ──────────────────────────────────────────
+  if (step === "fee" && useRouter && !approveConfirmed) {
     return (
       <div className="max-w-md mx-auto">
         <div className="rounded-2xl border border-primary/20 bg-card p-8 text-center space-y-4">
@@ -166,8 +196,12 @@ export default function SendPage() {
           </div>
           <h2 className="text-lg font-bold">Approve Router</h2>
           <p className="text-sm text-muted-foreground">
-            Allow BasePayRouter to spend your USDC. This is a one-time approval.
+            Allowing BasePayRouter to spend exactly <span className="font-semibold text-foreground">{amount} USDC</span>.
           </p>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300 text-left">
+            <p className="font-semibold mb-0.5">⚠ Wallet may show a security warning</p>
+            <p>This is a false positive — the router is <a href="https://basescan.org/address/0x2d7ba7ed34f8fa16fe4d0d11b51306dc753812c8#code" target="_blank" rel="noreferrer" className="underline">source-verified on BaseScan</a>. Click <strong>"Report an issue"</strong> in the warning to help whitelist it.</p>
+          </div>
           <p className="text-xs text-muted-foreground font-mono">{isApproving ? "Confirm in wallet..." : "Waiting for confirmation..."}</p>
         </div>
       </div>
@@ -340,6 +374,27 @@ export default function SendPage() {
         {error && (
           <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
             {error.message.slice(0, 150)}
+          </div>
+        )}
+
+        {/* Router toggle */}
+        {HAS_ROUTER && (
+          <div className={`flex items-start gap-3 rounded-lg border px-3.5 py-3 transition-colors cursor-pointer ${
+            routerEnabled ? "border-primary/30 bg-primary/5" : "border-border bg-secondary/50"
+          }`} onClick={() => setRouterEnabled(r => !r)}>
+            <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
+              routerEnabled ? "bg-primary border-primary" : "border-muted-foreground/40"
+            }`}>
+              {routerEnabled && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">⚡ Single-transaction via Router</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                {routerEnabled
+                  ? "One tx handles fee + payment atomically. Requires a one-time approval — your wallet may show a security warning (false positive)."
+                  : "Default: 2 txs (fee + payment) — no approval needed, no wallet warnings."}
+              </p>
+            </div>
           </div>
         )}
 

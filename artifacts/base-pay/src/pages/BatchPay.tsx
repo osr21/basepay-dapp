@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
 import { isAddress } from "viem";
+import { BlockaidWarning } from "@/components/BlockaidWarning";
 import {
   USDC_ADDRESS, USDC_ABI, BATCH_PAY_ABI,
   parseUSDC, formatUSDC, truncateAddress,
@@ -100,15 +101,21 @@ export default function BatchPayPage() {
 
   if (step === "approving") {
     return (
-      <div className="max-w-md mx-auto">
-        <div className="rounded-2xl border border-primary/20 bg-card p-8 text-center space-y-4">
-          <div className="w-14 h-14 rounded-full border border-primary/30 bg-primary/10 flex items-center justify-center mx-auto">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="hsl(221,83%,63%)" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <h2 className="text-lg font-bold">Approve BatchPay</h2>
-          <p className="text-sm text-muted-foreground">Allow BatchPay to spend your USDC for this batch.</p>
-          <p className="text-xs text-muted-foreground font-mono">{isApproving ? "Confirm in wallet..." : "Waiting for confirmation..."}</p>
+      <div className="max-w-md mx-auto space-y-4">
+        <div>
+          <h1 className="text-xl font-bold">Batch Pay</h1>
+          <p className="text-sm text-muted-foreground">Step 1 of 2 — Approve BatchPay contract</p>
         </div>
+        <BlockaidWarning
+          contractName="BatchPay"
+          contractAddress="0x82569caf7847040a03ad2c6545ade5af2bdcf47c"
+          proceedLabel={isApproving ? "Confirm in wallet..." : "Approve in Wallet"}
+          onProceed={() => {}}
+          onCancel={handleReset}
+        />
+        {isApproving && (
+          <p className="text-center text-xs text-muted-foreground font-mono">Waiting for wallet confirmation...</p>
+        )}
       </div>
     );
   }

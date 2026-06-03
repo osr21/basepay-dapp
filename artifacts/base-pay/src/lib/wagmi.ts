@@ -129,6 +129,127 @@ export const ROUTER_ABI = [
   },
 ] as const;
 
+// ── BatchPay ABI ─────────────────────────────────────────────────────────────
+export const BATCH_PAY_ABI = [
+  {
+    type: "function", name: "batchSend",
+    inputs: [
+      { name: "token",      type: "address"   },
+      { name: "recipients", type: "address[]" },
+      { name: "amounts",    type: "uint256[]" },
+      { name: "memo",       type: "string"    },
+    ],
+    outputs: [], stateMutability: "nonpayable",
+  },
+  {
+    type: "function", name: "quoteBatch",
+    inputs: [{ name: "amounts", type: "uint256[]" }],
+    outputs: [
+      { name: "totalGross", type: "uint256" },
+      { name: "totalFee",   type: "uint256" },
+      { name: "totalNet",   type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
+  { type: "function", name: "feeBps", inputs: [], outputs: [{ name: "", type: "uint256" }], stateMutability: "view" },
+] as const;
+
+// ── Escrow ABI ────────────────────────────────────────────────────────────────
+export const ESCROW_ABI = [
+  {
+    type: "function", name: "create",
+    inputs: [
+      { name: "token",  type: "address" },
+      { name: "payee",  type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "ttl",    type: "uint256" },
+      { name: "memo",   type: "string"  },
+    ],
+    outputs: [{ name: "id", type: "uint256" }], stateMutability: "nonpayable",
+  },
+  {
+    type: "function", name: "release",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [], stateMutability: "nonpayable",
+  },
+  {
+    type: "function", name: "refund",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [], stateMutability: "nonpayable",
+  },
+  {
+    type: "function", name: "quote",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [
+      { name: "fee", type: "uint256" },
+      { name: "net", type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function", name: "escrowCount",
+    inputs: [], outputs: [{ name: "", type: "uint256" }], stateMutability: "view",
+  },
+  {
+    type: "event", name: "EscrowCreated",
+    inputs: [
+      { name: "id",     type: "uint256", indexed: true  },
+      { name: "payer",  type: "address", indexed: true  },
+      { name: "payee",  type: "address", indexed: true  },
+      { name: "token",  type: "address", indexed: false },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "expiry", type: "uint256", indexed: false },
+      { name: "memo",   type: "string",  indexed: false },
+    ],
+  },
+] as const;
+
+// ── SubscriptionManager ABI ───────────────────────────────────────────────────
+export const SUBSCRIPTION_MANAGER_ABI = [
+  {
+    type: "function", name: "subscribe",
+    inputs: [
+      { name: "token",    type: "address" },
+      { name: "payee",    type: "address" },
+      { name: "amount",   type: "uint256" },
+      { name: "interval", type: "uint256" },
+      { name: "memo",     type: "string"  },
+    ],
+    outputs: [{ name: "id", type: "uint256" }], stateMutability: "nonpayable",
+  },
+  {
+    type: "function", name: "charge",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [], stateMutability: "nonpayable",
+  },
+  {
+    type: "function", name: "cancel",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [], stateMutability: "nonpayable",
+  },
+  {
+    type: "function", name: "nextChargeAt",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [{ name: "timestamp", type: "uint256" }], stateMutability: "view",
+  },
+  {
+    type: "function", name: "subCount",
+    inputs: [], outputs: [{ name: "", type: "uint256" }], stateMutability: "view",
+  },
+  {
+    type: "event", name: "Subscribed",
+    inputs: [
+      { name: "id",       type: "uint256", indexed: true  },
+      { name: "payer",    type: "address", indexed: true  },
+      { name: "payee",    type: "address", indexed: true  },
+      { name: "token",    type: "address", indexed: false },
+      { name: "amount",   type: "uint256", indexed: false },
+      { name: "interval", type: "uint256", indexed: false },
+      { name: "memo",     type: "string",  indexed: false },
+    ],
+  },
+] as const;
+
 // ── Fee / deployer config ────────────────────────────────────────────────────
 export const FEE_COLLECTOR_ADDRESS = (
   import.meta.env.VITE_FEE_COLLECTOR_ADDRESS ?? ""

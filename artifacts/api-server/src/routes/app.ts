@@ -19,7 +19,18 @@ function serialize(r: typeof appRegistrationTable.$inferSelect) {
 
 async function ensureRegistration() {
   const [existing] = await db.select().from(appRegistrationTable).where(eq(appRegistrationTable.id, 1));
-  if (existing) return existing;
+  if (existing) {
+    // If env vars supply a router address that differs from what's stored, sync it
+    if (ROUTER_ADDR && existing.routerAddress !== ROUTER_ADDR) {
+      const [updated] = await db
+        .update(appRegistrationTable)
+        .set({ routerAddress: ROUTER_ADDR })
+        .where(eq(appRegistrationTable.id, 1))
+        .returning();
+      return updated;
+    }
+    return existing;
+  }
   const [created] = await db
     .insert(appRegistrationTable)
     .values({

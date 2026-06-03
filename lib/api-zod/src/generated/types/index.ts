@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './appConfig';
+export * from './appRegisterInput';
 export * from './contact';
 export * from './contactInput';
 export * from './deleteResult';

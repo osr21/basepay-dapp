@@ -30,3 +30,14 @@ externalPort = 8081
 [[ports]]
 localPort = 23275
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+VITE_FEE_COLLECTOR_ADDRESS = "0xdb5019b8dfbccef8906c39b16a4870082eabbc4c"
+VITE_FEE_BPS = "30"
+VITE_APP_NAME = "BasePay"
+VITE_ROUTER_ADDRESS = ""
+FEE_COLLECTOR_ADDRESS = "0xdb5019b8dfbccef8906c39b16a4870082eabbc4c"
+FEE_BPS = "30"
+DEPLOYER_ADDRESS = "0xdb5019b8dfbccef8906c39b16a4870082eabbc4c"

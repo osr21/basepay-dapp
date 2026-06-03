@@ -168,3 +168,57 @@ export const GetStatsResponse = zod.object({
 })
 
 
+/**
+ * @summary Get dApp registration and fee configuration
+ */
+export const GetAppConfigResponse = zod.object({
+  "appName": zod.string(),
+  "appVersion": zod.string(),
+  "deployerAddress": zod.string(),
+  "feeCollectorAddress": zod.string(),
+  "feeBps": zod.number(),
+  "routerAddress": zod.string().nullish(),
+  "network": zod.string(),
+  "chainId": zod.number(),
+  "verified": zod.boolean(),
+  "registeredAt": zod.string(),
+  "updatedAt": zod.string().optional()
+})
+
+
+/**
+ * @summary Register or update dApp configuration
+ */
+export const registerAppBodyDeployerAddressMin = 42;
+export const registerAppBodyDeployerAddressMax = 42;
+
+export const registerAppBodyFeeCollectorAddressMin = 42;
+export const registerAppBodyFeeCollectorAddressMax = 42;
+
+export const registerAppBodyFeeBpsMin = 0;
+export const registerAppBodyFeeBpsMax = 1000;
+
+
+
+export const RegisterAppBody = zod.object({
+  "deployerAddress": zod.string().min(registerAppBodyDeployerAddressMin).max(registerAppBodyDeployerAddressMax),
+  "feeCollectorAddress": zod.string().min(registerAppBodyFeeCollectorAddressMin).max(registerAppBodyFeeCollectorAddressMax),
+  "feeBps": zod.number().min(registerAppBodyFeeBpsMin).max(registerAppBodyFeeBpsMax).optional(),
+  "routerAddress": zod.string().optional()
+})
+
+export const RegisterAppResponse = zod.object({
+  "appName": zod.string(),
+  "appVersion": zod.string(),
+  "deployerAddress": zod.string(),
+  "feeCollectorAddress": zod.string(),
+  "feeBps": zod.number(),
+  "routerAddress": zod.string().nullish(),
+  "network": zod.string(),
+  "chainId": zod.number(),
+  "verified": zod.boolean(),
+  "registeredAt": zod.string(),
+  "updatedAt": zod.string().optional()
+})
+
+

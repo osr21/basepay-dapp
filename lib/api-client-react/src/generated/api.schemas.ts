@@ -96,6 +96,40 @@ export interface DeleteResult {
   success: boolean;
 }
 
+export interface AppConfig {
+  appName: string;
+  appVersion: string;
+  deployerAddress: string;
+  feeCollectorAddress: string;
+  feeBps: number;
+  /** @nullable */
+  routerAddress?: string | null;
+  network: string;
+  chainId: number;
+  verified: boolean;
+  registeredAt: string;
+  updatedAt?: string;
+}
+
+export interface AppRegisterInput {
+  /**
+     * @minLength 42
+     * @maxLength 42
+     */
+  deployerAddress: string;
+  /**
+     * @minLength 42
+     * @maxLength 42
+     */
+  feeCollectorAddress: string;
+  /**
+     * @minimum 0
+     * @maximum 1000
+     */
+  feeBps?: number;
+  routerAddress?: string;
+}
+
 export interface ErrorResponse {
   error: string;
 }

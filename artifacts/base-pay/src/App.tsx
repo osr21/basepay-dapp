@@ -9,6 +9,7 @@ import RequestPage from "@/pages/Request";
 import RequestsPage from "@/pages/Requests";
 import ContactsPage from "@/pages/Contacts";
 import PayPage from "@/pages/Pay";
+import AppInfoPage from "@/pages/AppInfo";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -29,6 +30,7 @@ function Router() {
         <Route path="/request" component={RequestPage} />
         <Route path="/requests" component={RequestsPage} />
         <Route path="/contacts" component={ContactsPage} />
+        <Route path="/app-info" component={AppInfoPage} />
         <Route path="/pay/:id" component={PayPage} />
         <Route component={NotFound} />
       </Switch>

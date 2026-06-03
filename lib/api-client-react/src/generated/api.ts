@@ -20,6 +20,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AppConfig,
+  AppRegisterInput,
   Contact,
   ContactInput,
   DeleteResult,
@@ -727,4 +729,152 @@ export function useGetStats<TData = Awaited<ReturnType<typeof getStats>>, TError
 
 
 
+
+export const getGetAppConfigUrl = () => {
+
+
+
+
+  return `/api/app/config`
+}
+
+/**
+ * @summary Get dApp registration and fee configuration
+ */
+export const getAppConfig = async ( options?: RequestInit): Promise<AppConfig> => {
+
+  return customFetch<AppConfig>(getGetAppConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAppConfigQueryKey = () => {
+    return [
+    `/api/app/config`
+    ] as const;
+    }
+
+
+export const getGetAppConfigQueryOptions = <TData = Awaited<ReturnType<typeof getAppConfig>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAppConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAppConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAppConfig>>> = ({ signal }) => getAppConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAppConfig>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAppConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getAppConfig>>>
+export type GetAppConfigQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get dApp registration and fee configuration
+ */
+
+export function useGetAppConfig<TData = Awaited<ReturnType<typeof getAppConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAppConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAppConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRegisterAppUrl = () => {
+
+
+
+
+  return `/api/app/config`
+}
+
+/**
+ * @summary Register or update dApp configuration
+ */
+export const registerApp = async (appRegisterInput: AppRegisterInput, options?: RequestInit): Promise<AppConfig> => {
+
+  return customFetch<AppConfig>(getRegisterAppUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      appRegisterInput,)
+  }
+);}
+
+
+
+
+export const getRegisterAppMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerApp>>, TError,{data: BodyType<AppRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerApp>>, TError,{data: BodyType<AppRegisterInput>}, TContext> => {
+
+const mutationKey = ['registerApp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerApp>>, {data: BodyType<AppRegisterInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerApp(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterAppMutationResult = NonNullable<Awaited<ReturnType<typeof registerApp>>>
+    export type RegisterAppMutationBody = BodyType<AppRegisterInput>
+    export type RegisterAppMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Register or update dApp configuration
+ */
+export const useRegisterApp = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerApp>>, TError,{data: BodyType<AppRegisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerApp>>,
+        TError,
+        {data: BodyType<AppRegisterInput>},
+        TContext
+      > => {
+      return useMutation(getRegisterAppMutationOptions(options));
+    }
 

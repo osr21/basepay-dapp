@@ -10,6 +10,7 @@ export * from './appConfig';
 export * from './appRegisterInput';
 export * from './contact';
 export * from './contactInput';
+export * from './deleteContactParams';
 export * from './deleteResult';
 export * from './errorResponse';
 export * from './healthStatus';

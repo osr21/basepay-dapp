@@ -138,6 +138,13 @@ export type ListContactsParams = {
 ownerAddress?: string;
 };
 
+export type DeleteContactParams = {
+/**
+ * Wallet address of the contact owner — only that owner's contact is deleted
+ */
+ownerAddress: string;
+};
+
 export type ListPaymentRequestsParams = {
 recipientAddress?: string;
 };

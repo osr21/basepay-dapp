@@ -37,6 +37,11 @@ export default function ContactsPage() {
     },
   });
 
+  function handleDeleteContact(id: number) {
+    if (!address) return;
+    deleteContact({ id, params: { ownerAddress: address } });
+  }
+
   const isValidAddress = isAddress(walletAddress);
   const canAdd = name.trim() && isValidAddress && !isCreating;
 
@@ -157,7 +162,7 @@ export default function ContactsPage() {
                     </a>
                   </Link>
                   <button
-                    onClick={() => deleteContact({ id: c.id })}
+                    onClick={() => handleDeleteContact(c.id)}
                     className="text-xs px-2.5 py-1.5 rounded-md border border-destructive/20 bg-destructive/5 text-destructive hover:bg-destructive/10 transition-all"
                   >
                     Remove

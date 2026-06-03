@@ -5,6 +5,7 @@ import {
   ListContactsQueryParams,
   CreateContactBody,
   DeleteContactParams,
+  DeleteContactQueryParams,
 } from "@workspace/api-zod";
 
 const router = Router();
@@ -15,9 +16,14 @@ router.get("/contacts", async (req, res) => {
     return res.status(400).json({ error: "Invalid query params" });
   }
   const { ownerAddress } = parsed.data;
-  const rows = ownerAddress
-    ? await db.select().from(contactsTable).where(eq(contactsTable.ownerAddress, ownerAddress))
-    : await db.select().from(contactsTable);
+  // ownerAddress is required — we never expose the full contacts table
+  if (!ownerAddress) {
+    return res.status(400).json({ error: "ownerAddress is required" });
+  }
+  const rows = await db
+    .select()
+    .from(contactsTable)
+    .where(eq(contactsTable.ownerAddress, ownerAddress));
   return res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
 
@@ -30,12 +36,24 @@ router.post("/contacts", async (req, res) => {
   return res.status(201).json({ ...row, createdAt: row.createdAt.toISOString() });
 });
 
+/**
+ * DELETE /api/contacts/:id?ownerAddress=0x...
+ * Requires ownerAddress so only the owner's contact is deleted.
+ */
 router.delete("/contacts/:id", async (req, res) => {
-  const parsed = DeleteContactParams.safeParse(req.params);
-  if (!parsed.success) {
+  const paramsParsed = DeleteContactParams.safeParse(req.params);
+  const queryParsed  = DeleteContactQueryParams.safeParse(req.query);
+  if (!paramsParsed.success || !queryParsed.success) {
     return res.status(400).json({ error: "Invalid params" });
   }
-  await db.delete(contactsTable).where(eq(contactsTable.id, parsed.data.id));
+  await db
+    .delete(contactsTable)
+    .where(
+      and(
+        eq(contactsTable.id, paramsParsed.data.id),
+        eq(contactsTable.ownerAddress, queryParsed.data.ownerAddress),
+      ),
+    );
   return res.json({ success: true });
 });
 

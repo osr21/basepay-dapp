@@ -59,7 +59,7 @@ export default function BatchPayPage() {
       address: USDC_ADDRESS,
       abi: USDC_ABI,
       functionName: "approve",
-      args: [BATCH_PAY_ADDRESS, totalGrossRaw * 2n],
+      args: [BATCH_PAY_ADDRESS, totalGrossRaw],
     });
   }
 

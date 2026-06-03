@@ -24,6 +24,7 @@ import type {
   AppRegisterInput,
   Contact,
   ContactInput,
+  DeleteContactParams,
   DeleteResult,
   ErrorResponse,
   HealthStatus,
@@ -279,20 +280,29 @@ export const useCreateContact = <TError = ErrorType<unknown>,
       return useMutation(getCreateContactMutationOptions(options));
     }
 
-export const getDeleteContactUrl = (id: number,) => {
+export const getDeleteContactUrl = (id: number,
+    params: DeleteContactParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/contacts/${id}`
+  return stringifiedParams.length > 0 ? `/api/contacts/${id}?${stringifiedParams}` : `/api/contacts/${id}`
 }
 
 /**
- * @summary Remove a contact
+ * @summary Remove a contact (owner-scoped)
  */
-export const deleteContact = async (id: number, options?: RequestInit): Promise<DeleteResult> => {
+export const deleteContact = async (id: number,
+    params: DeleteContactParams, options?: RequestInit): Promise<DeleteResult> => {
 
-  return customFetch<DeleteResult>(getDeleteContactUrl(id),
+  return customFetch<DeleteResult>(getDeleteContactUrl(id,params),
   {
     ...options,
     method: 'DELETE'
@@ -305,8 +315,8 @@ export const deleteContact = async (id: number, options?: RequestInit): Promise<
 
 
 export const getDeleteContactMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteContact>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteContact>>, TError,{id: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteContact>>, TError,{id: number;params: DeleteContactParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteContact>>, TError,{id: number;params: DeleteContactParams}, TContext> => {
 
 const mutationKey = ['deleteContact'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -318,10 +328,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteContact>>, {id: number}> = (props) => {
-          const {id} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteContact>>, {id: number;params: DeleteContactParams}> = (props) => {
+          const {id,params} = props ?? {};
 
-          return  deleteContact(id,requestOptions)
+          return  deleteContact(id,params,requestOptions)
         }
 
 
@@ -336,14 +346,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteContactMutationError = ErrorType<unknown>
 
     /**
- * @summary Remove a contact
+ * @summary Remove a contact (owner-scoped)
  */
 export const useDeleteContact = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteContact>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteContact>>, TError,{id: number;params: DeleteContactParams}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof deleteContact>>,
         TError,
-        {id: number},
+        {id: number;params: DeleteContactParams},
         TContext
       > => {
       return useMutation(getDeleteContactMutationOptions(options));

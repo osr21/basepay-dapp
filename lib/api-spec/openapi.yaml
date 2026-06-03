@@ -74,13 +74,19 @@ paths:
     delete:
       operationId: deleteContact
       tags: [contacts]
-      summary: Remove a contact
+      summary: Remove a contact (owner-scoped)
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: integer
+        - name: ownerAddress
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Wallet address of the contact owner — only that owner's contact is deleted
       responses:
         "200":
           description: Deleted

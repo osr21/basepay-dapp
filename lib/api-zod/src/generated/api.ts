@@ -50,10 +50,14 @@ export const CreateContactBody = zod.object({
 
 
 /**
- * @summary Remove a contact
+ * @summary Remove a contact (owner-scoped)
  */
 export const DeleteContactParams = zod.object({
   "id": zod.coerce.number()
+})
+
+export const DeleteContactQueryParams = zod.object({
+  "ownerAddress": zod.coerce.string().describe('Wallet address of the contact owner — only that owner\'s contact is deleted')
 })
 
 export const DeleteContactResponse = zod.object({

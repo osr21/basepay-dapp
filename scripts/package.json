@@ -6,6 +6,9 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "deploy-router": "tsx ./src/deploy-router.ts",
+    "deploy-batch-pay": "tsx ./src/deploy-batch-pay.ts",
+    "deploy-escrow": "tsx ./src/deploy-escrow.ts",
+    "deploy-subscription-manager": "tsx ./src/deploy-subscription-manager.ts",
     "wallet-info": "tsx ./src/wallet-info.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "BasePay — USDC Payments"
+version = "1.0.0"
+id = "artifacts/base-pay"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23275
+
+[services.development]
+run = "pnpm --filter @workspace/base-pay run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/base-pay", "run", "build" ]
+publicDir = "artifacts/base-pay/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23275"
+BASE_PATH = "/"

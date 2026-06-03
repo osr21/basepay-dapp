@@ -1,22 +1,27 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: BasePay — USDC Payments on Base Network
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: contacts
+    description: Address book contacts
+  - name: payment-requests
+    description: Shareable payment request links
+  - name: stats
+    description: Payment statistics
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +29,286 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /contacts:
+    get:
+      operationId: listContacts
+      tags: [contacts]
+      summary: List all contacts
+      parameters:
+        - name: ownerAddress
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Contact"
+    post:
+      operationId: createContact
+      tags: [contacts]
+      summary: Add a contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactInput"
+      responses:
+        "201":
+          description: Contact created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+
+  /contacts/{id}:
+    delete:
+      operationId: deleteContact
+      tags: [contacts]
+      summary: Remove a contact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResult"
+
+  /payment-requests:
+    get:
+      operationId: listPaymentRequests
+      tags: [payment-requests]
+      summary: List payment requests for an address
+      parameters:
+        - name: recipientAddress
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of payment requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaymentRequest"
+    post:
+      operationId: createPaymentRequest
+      tags: [payment-requests]
+      summary: Create a shareable payment request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentRequestInput"
+      responses:
+        "201":
+          description: Payment request created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentRequest"
+
+  /payment-requests/{id}:
+    get:
+      operationId: getPaymentRequest
+      tags: [payment-requests]
+      summary: Get a payment request by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payment request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentRequest"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updatePaymentRequest
+      tags: [payment-requests]
+      summary: Mark payment request as paid
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentRequestUpdate"
+      responses:
+        "200":
+          description: Updated payment request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentRequest"
+
+  /stats/{address}:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: Get payment stats for a wallet address
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentStats"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    Contact:
+      type: object
+      required: [id, name, walletAddress, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        walletAddress:
+          type: string
+        ensName:
+          type: ["string", "null"]
+        ownerAddress:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    ContactInput:
+      type: object
+      required: [name, walletAddress]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        walletAddress:
+          type: string
+          minLength: 1
+        ensName:
+          type: string
+        ownerAddress:
+          type: string
+
+    PaymentRequest:
+      type: object
+      required: [id, recipientAddress, amount, token, status, createdAt]
+      properties:
+        id:
+          type: string
+        recipientAddress:
+          type: string
+        amount:
+          type: string
+        token:
+          type: string
+        memo:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, paid, cancelled]
+        paidTxHash:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    PaymentRequestInput:
+      type: object
+      required: [recipientAddress, amount, token]
+      properties:
+        recipientAddress:
+          type: string
+          minLength: 1
+        amount:
+          type: string
+          minLength: 1
+        token:
+          type: string
+          enum: [USDC, ETH]
+        memo:
+          type: string
+
+    PaymentRequestUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, paid, cancelled]
+        paidTxHash:
+          type: string
+
+    PaymentStats:
+      type: object
+      required: [totalRequestsCreated, totalRequestsPaid, totalAmountRequested, pendingRequests, recentActivity]
+      properties:
+        totalRequestsCreated:
+          type: integer
+        totalRequestsPaid:
+          type: integer
+        totalAmountRequested:
+          type: string
+        pendingRequests:
+          type: integer
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentRequest"
+
+    DeleteResult:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

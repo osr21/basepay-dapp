@@ -2,23 +2,17 @@ import { createPublicClient, http, formatEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 
-const ROUTER_ADDRESS = "0x2d7ba7ed34f8fa16fe4d0d11b51306dc753812c8" as const;
-const USDC_ADDRESS   = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
+const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
+
+const CONTRACTS: Array<{ name: string; address: `0x${string}`; envVar: string }> = [
+  { name: "BasePayRouter",       address: "0x2d7ba7ed34f8fa16fe4d0d11b51306dc753812c8", envVar: "VITE_ROUTER_ADDRESS" },
+  { name: "BatchPay",            address: "0x82569caf7847040a03ad2c6545ade5af2bdcf47c", envVar: "VITE_BATCH_PAY_ADDRESS" },
+  { name: "Escrow",              address: "0x5b3241a47acfda41f15dfd7260339e2a88d52318", envVar: "VITE_ESCROW_ADDRESS" },
+  { name: "SubscriptionManager", address: "0x546093b0476b4b7909cd84f3a0fef813c421d14a", envVar: "VITE_SUBSCRIPTION_MANAGER_ADDRESS" },
+];
 
 const USDC_ABI = [
   { type: "function", name: "balanceOf", inputs: [{ name: "a", type: "address" }], outputs: [{ name: "", type: "uint256" }], stateMutability: "view" },
-] as const;
-
-const ROUTER_ABI = [
-  { type: "function", name: "owner",        inputs: [], outputs: [{ name: "", type: "address" }], stateMutability: "view" },
-  { type: "function", name: "feeCollector", inputs: [], outputs: [{ name: "", type: "address" }], stateMutability: "view" },
-  { type: "function", name: "feeBps",       inputs: [], outputs: [{ name: "", type: "uint256" }], stateMutability: "view" },
-  { type: "function", name: "paused",       inputs: [], outputs: [{ name: "", type: "bool" }],    stateMutability: "view" },
-  { type: "function", name: "appInfo",      inputs: [], outputs: [
-    { name: "name",    type: "string" },
-    { name: "version", type: "string" },
-    { name: "network", type: "string" },
-  ], stateMutability: "pure" },
 ] as const;
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -34,40 +28,24 @@ console.log("  BasePay Deployer Wallet - Base Mainnet");
 console.log("=========================================\n");
 
 const ethBalance = await client.getBalance({ address: account.address });
-await sleep(1200);
+await sleep(1000);
 const usdcBalance = await client.readContract({ address: USDC_ADDRESS, abi: USDC_ABI, functionName: "balanceOf", args: [account.address] });
-await sleep(1200);
-const routerCode = await client.getBytecode({ address: ROUTER_ADDRESS });
 
 console.log("Deployer address :", account.address);
 console.log("ETH balance      :", formatEther(ethBalance), "ETH");
 console.log("USDC balance     :", (Number(usdcBalance) / 1e6).toFixed(2), "USDC");
-console.log();
-console.log("---  Deployed Contracts  ---\n");
+console.log("\n---  Deployed Contracts  ---\n");
 
-const routerDeployed = routerCode && routerCode.length > 2;
-if (routerDeployed) {
-  await sleep(1200);
-  const owner = await client.readContract({ address: ROUTER_ADDRESS, abi: ROUTER_ABI, functionName: "owner" });
-  await sleep(1200);
-  const feeCollector = await client.readContract({ address: ROUTER_ADDRESS, abi: ROUTER_ABI, functionName: "feeCollector" });
-  await sleep(1200);
-  const feeBps = await client.readContract({ address: ROUTER_ADDRESS, abi: ROUTER_ABI, functionName: "feeBps" });
-  await sleep(1200);
-  const paused = await client.readContract({ address: ROUTER_ADDRESS, abi: ROUTER_ABI, functionName: "paused" });
-  await sleep(1200);
-  const appInfo = await client.readContract({ address: ROUTER_ADDRESS, abi: ROUTER_ABI, functionName: "appInfo" });
-
-  console.log("[OK] BasePayRouter");
-  console.log("     Address     :", ROUTER_ADDRESS);
-  console.log("     BaseScan    : https://basescan.org/address/" + ROUTER_ADDRESS);
-  console.log("     App         :", appInfo[0], appInfo[1], "on", appInfo[2]);
-  console.log("     Owner       :", owner);
-  console.log("     Fee collect :", feeCollector);
-  console.log("     Fee         :", feeBps.toString(), "bps (" + Number(feeBps) / 100 + "%)");
-  console.log("     Paused      :", paused);
-} else {
-  console.log("[!!] BasePayRouter not found at", ROUTER_ADDRESS);
+for (const c of CONTRACTS) {
+  await sleep(1000);
+  const code = await client.getBytecode({ address: c.address });
+  const deployed = code && code.length > 2;
+  const status = deployed ? "[OK]" : "[!!]";
+  console.log(`${status}  ${c.name}`);
+  console.log(`     Address : ${c.address}`);
+  console.log(`     Env var : ${c.envVar}`);
+  console.log(`     BaseScan: https://basescan.org/address/${c.address}`);
+  console.log();
 }
 
-console.log("\n=========================================\n");
+console.log("=========================================\n");

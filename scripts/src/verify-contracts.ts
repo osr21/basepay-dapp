@@ -14,7 +14,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root      = resolve(__dirname, "../../contracts");
 
 const API_KEY = process.env.BASESCAN_API_KEY ?? "";
-const BASE_URL = "https://api.basescan.org/api";
+// Etherscan V2 unified endpoint — chain 8453 = Base Mainnet
+const BASE_URL = "https://api.etherscan.io/v2/api?chainid=8453";
 
 // Compiler must exactly match what was used to deploy (solc 0.8.20 via npm, optimizer on 200 runs)
 const COMPILER_VERSION = "v0.8.20+commit.a1b79de6";
@@ -42,16 +43,14 @@ const CONTRACTS: ContractEntry[] = [
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+function buildUrl(params: Record<string, string>): string {
+  return BASE_URL + "&" + new URLSearchParams({ apikey: API_KEY, ...params }).toString();
+}
+
 async function checkStatus(guid: string): Promise<string> {
   for (let i = 0; i < 30; i++) {
     await sleep(5000);
-    const params = new URLSearchParams({
-      apikey: API_KEY,
-      module: "contract",
-      action: "checkverifystatus",
-      guid,
-    });
-    const res = await fetch(`${BASE_URL}?${params}`);
+    const res  = await fetch(buildUrl({ module: "contract", action: "checkverifystatus", guid }));
     const json = await res.json() as { status: string; result: string };
     console.log(`  Status [${i + 1}/30]: ${json.result}`);
     if (json.result !== "Pending in queue") return json.result;
@@ -65,7 +64,6 @@ async function verifyContract(entry: ContractEntry): Promise<void> {
   console.log(`\nVerifying ${entry.name} at ${entry.address}...`);
 
   const body = new URLSearchParams({
-    apikey:                API_KEY,
     module:                "contract",
     action:                "verifysourcecode",
     contractaddress:       entry.address,
@@ -80,7 +78,9 @@ async function verifyContract(entry: ContractEntry): Promise<void> {
     evmversion:            "",
   });
 
-  const res  = await fetch(BASE_URL, { method: "POST", body });
+  // chainid + apikey must be in the query string for V2; the rest go in the POST body
+  const postUrl = `https://api.etherscan.io/v2/api?chainid=8453&apikey=${API_KEY}`;
+  const res  = await fetch(postUrl, { method: "POST", body });
   const json = await res.json() as { status: string; message: string; result: string };
   console.log(`  Submit response:`, json);
 

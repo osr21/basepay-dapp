@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { isAddress, decodeEventLog } from "viem";
 import {
-  USDC_ADDRESS, USDC_ABI, ESCROW_ABI,
+  USDC_ADDRESS, ESCROW_ABI,
   parseUSDC, formatUSDC, truncateAddress,
 } from "@/lib/wagmi";
+import { useUsdcPermit } from "@/lib/useUsdcPermit";
 import { WalletButton } from "@/components/Layout";
-import { BlockaidWarning } from "@/components/BlockaidWarning";
 
 const ESCROW_ADDRESS = (import.meta.env.VITE_ESCROW_ADDRESS ?? "") as `0x${string}`;
 
@@ -23,26 +23,17 @@ export default function EscrowPage() {
   const [amount, setAmount]   = useState("");
   const [ttlIdx, setTtlIdx]   = useState(1);
   const [memo, setMemo]       = useState("");
-  const [step, setStep]       = useState<"idle" | "approving" | "creating" | "done">("idle");
+  const [step, setStep]       = useState<"idle" | "signing" | "creating" | "done">("idle");
+  const [isSigning, setIsSigning] = useState(false);
   const [escrowId, setEscrowId] = useState<string | undefined>();
   const [txHash, setTxHash]   = useState<`0x${string}` | undefined>();
+  const [signError, setSignError] = useState<string | undefined>();
 
   const amountRaw = amount && parseFloat(amount) > 0 ? parseUSDC(amount) : 0n;
   const feeRaw    = (amountRaw * 30n) / 10_000n;
   const netRaw    = amountRaw - feeRaw;
 
-  const { data: allowance } = useReadContract({
-    address: USDC_ADDRESS,
-    abi: USDC_ABI,
-    functionName: "allowance",
-    args: address ? [address, ESCROW_ADDRESS] : undefined,
-    query: { enabled: !!address && !!ESCROW_ADDRESS },
-  });
-
-  const needsApproval = allowance !== undefined && amountRaw > 0n && allowance < amountRaw;
-
-  const { writeContract: writeApprove, data: approveTxHash, isPending: isApproving } = useWriteContract();
-  const { isSuccess: approveConfirmed } = useWaitForTransactionReceipt({ hash: approveTxHash });
+  const { signPermit } = useUsdcPermit(address);
 
   const { writeContract: writeCreate, data: createTxHash, isPending: isCreating, error: createError, reset } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: confirmed, data: receipt } = useWaitForTransactionReceipt({ hash: createTxHash });
@@ -63,39 +54,39 @@ export default function EscrowPage() {
     setStep("done");
   }
 
-  if (approveConfirmed && step === "approving") {
-    setStep("idle");
-  }
-
-  function handleApprove() {
-    setStep("approving");
-    writeApprove({
-      address: USDC_ADDRESS,
-      abi: USDC_ABI,
-      functionName: "approve",
-      args: [ESCROW_ADDRESS, amountRaw],
-    });
-  }
-
-  function handleCreate() {
-    setStep("creating");
-    writeCreate({
-      address: ESCROW_ADDRESS,
-      abi: ESCROW_ABI,
-      functionName: "create",
-      args: [USDC_ADDRESS, payee as `0x${string}`, amountRaw, DURATIONS[ttlIdx].seconds, memo],
-    });
+  async function handleCreate() {
+    if (!isAddress(payee) || !parseFloat(amount) || !ESCROW_ADDRESS) return;
+    setIsSigning(true);
+    setSignError(undefined);
+    try {
+      const { v, r, s, deadline } = await signPermit(ESCROW_ADDRESS, amountRaw);
+      setIsSigning(false);
+      setStep("creating");
+      writeCreate({
+        address: ESCROW_ADDRESS,
+        abi: ESCROW_ABI,
+        functionName: "createWithPermit",
+        args: [USDC_ADDRESS, payee as `0x${string}`, amountRaw, DURATIONS[ttlIdx].seconds, memo, deadline, v, r, s],
+      });
+    } catch (err: unknown) {
+      setIsSigning(false);
+      setStep("idle");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.toLowerCase().includes("rejected") && !msg.toLowerCase().includes("denied")) {
+        setSignError(msg.slice(0, 120));
+      }
+    }
   }
 
   function handleReset() {
     reset();
     setPayee(""); setAmount(""); setMemo("");
-    setStep("idle"); setEscrowId(undefined); setTxHash(undefined);
+    setStep("idle"); setEscrowId(undefined); setTxHash(undefined); setSignError(undefined);
   }
 
   const isValidPayee  = isAddress(payee);
   const isValidAmount = parseFloat(amount) > 0;
-  const isBusy        = isApproving || isCreating || isConfirming;
+  const isBusy        = isSigning || isCreating || isConfirming;
   const canProceed    = isValidPayee && isValidAmount && !isBusy;
 
   if (!isConnected) {
@@ -107,23 +98,21 @@ export default function EscrowPage() {
     );
   }
 
-  if (step === "approving") {
+  if (isSigning) {
     return (
-      <div className="max-w-md mx-auto space-y-4">
-        <div>
-          <h1 className="text-xl font-bold">Escrow</h1>
-          <p className="text-sm text-muted-foreground">Step 1 of 2 — Approve Escrow contract</p>
+      <div className="max-w-md mx-auto">
+        <div className="rounded-2xl border border-primary/20 bg-card p-8 text-center space-y-4">
+          <div className="w-14 h-14 rounded-full border border-primary/30 bg-primary/10 flex items-center justify-center mx-auto glow-pulse">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="hsl(221,83%,63%)" strokeWidth="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold">Sign message in wallet</h2>
+          <p className="text-sm text-muted-foreground">
+            Off-chain permit for <span className="text-foreground font-semibold">{amount} USDC</span> — no gas, no approval transaction.
+          </p>
+          <p className="text-xs text-muted-foreground font-mono">Waiting for signature...</p>
         </div>
-        <BlockaidWarning
-          contractName="Escrow"
-          contractAddress="0x5b3241a47acfda41f15dfd7260339e2a88d52318"
-          proceedLabel={isApproving ? "Confirm in wallet..." : "Approve in Wallet"}
-          onProceed={() => {}}
-          onCancel={handleReset}
-        />
-        {isApproving && (
-          <p className="text-center text-xs text-muted-foreground font-mono">Waiting for wallet confirmation...</p>
-        )}
       </div>
     );
   }
@@ -177,7 +166,7 @@ export default function EscrowPage() {
     <div className="max-w-md mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Escrow</h1>
-        <p className="text-muted-foreground text-sm mt-1">Lock USDC until the payee claims it, with a timeout refund</p>
+        <p className="text-muted-foreground text-sm mt-1">Lock USDC until the payee claims it · Sign a message, no approval needed</p>
       </div>
 
       {!ESCROW_ADDRESS && (
@@ -186,8 +175,10 @@ export default function EscrowPage() {
         </div>
       )}
 
-      {createError && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">{createError.message.split("\n")[0]}</div>
+      {(createError || signError) && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+          {signError ?? createError?.message.split("\n")[0]}
+        </div>
       )}
 
       <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
@@ -260,19 +251,11 @@ export default function EscrowPage() {
         </div>
       )}
 
-      {needsApproval ? (
-        <button
-          onClick={handleApprove}
-          disabled={!canProceed || !ESCROW_ADDRESS}
-          className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
-        >Approve USDC for Escrow</button>
-      ) : (
-        <button
-          onClick={handleCreate}
-          disabled={!canProceed || !ESCROW_ADDRESS}
-          className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
-        >{isBusy ? "Processing…" : "Create Escrow"}</button>
-      )}
+      <button
+        onClick={handleCreate}
+        disabled={!canProceed || !ESCROW_ADDRESS}
+        className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
+      >{isBusy ? "Processing…" : "Create Escrow"}</button>
     </div>
   );
 }

@@ -63,6 +63,13 @@ export const USDC_ABI = [
     outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "nonces",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
 ] as const;
 
 // ── BasePayRouter ABI ────────────────────────────────────────────────────────
@@ -115,6 +122,22 @@ export const ROUTER_ABI = [
     stateMutability: "pure",
   },
   {
+    type: "function",
+    name: "sendWithPermit",
+    inputs: [
+      { name: "token",     type: "address" },
+      { name: "recipient", type: "address" },
+      { name: "amount",    type: "uint256" },
+      { name: "memo",      type: "string"  },
+      { name: "deadline",  type: "uint256" },
+      { name: "v",         type: "uint8"   },
+      { name: "r",         type: "bytes32" },
+      { name: "s",         type: "bytes32" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
     type: "event",
     name: "Payment",
     inputs: [
@@ -152,6 +175,22 @@ export const BATCH_PAY_ABI = [
     stateMutability: "view",
   },
   { type: "function", name: "feeBps", inputs: [], outputs: [{ name: "", type: "uint256" }], stateMutability: "view" },
+  {
+    type: "function",
+    name: "batchSendWithPermit",
+    inputs: [
+      { name: "token",        type: "address"   },
+      { name: "recipients",   type: "address[]" },
+      { name: "amounts",      type: "uint256[]" },
+      { name: "memo",         type: "string"    },
+      { name: "permitAmount", type: "uint256"   },
+      { name: "deadline",     type: "uint256"   },
+      { name: "v",            type: "uint8"     },
+      { name: "r",            type: "bytes32"   },
+      { name: "s",            type: "bytes32"   },
+    ],
+    outputs: [], stateMutability: "nonpayable",
+  },
 ] as const;
 
 // ── Escrow ABI ────────────────────────────────────────────────────────────────
@@ -189,6 +228,22 @@ export const ESCROW_ABI = [
   {
     type: "function", name: "escrowCount",
     inputs: [], outputs: [{ name: "", type: "uint256" }], stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "createWithPermit",
+    inputs: [
+      { name: "token",    type: "address" },
+      { name: "payee",    type: "address" },
+      { name: "amount",   type: "uint256" },
+      { name: "ttl",      type: "uint256" },
+      { name: "memo",     type: "string"  },
+      { name: "deadline", type: "uint256" },
+      { name: "v",        type: "uint8"   },
+      { name: "r",        type: "bytes32" },
+      { name: "s",        type: "bytes32" },
+    ],
+    outputs: [{ name: "id", type: "uint256" }], stateMutability: "nonpayable",
   },
   {
     type: "event", name: "EscrowCreated",
@@ -235,6 +290,23 @@ export const SUBSCRIPTION_MANAGER_ABI = [
   {
     type: "function", name: "subCount",
     inputs: [], outputs: [{ name: "", type: "uint256" }], stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "subscribeWithPermit",
+    inputs: [
+      { name: "token",        type: "address" },
+      { name: "payee",        type: "address" },
+      { name: "amount",       type: "uint256" },
+      { name: "interval",     type: "uint256" },
+      { name: "memo",         type: "string"  },
+      { name: "permitAmount", type: "uint256" },
+      { name: "deadline",     type: "uint256" },
+      { name: "v",            type: "uint8"   },
+      { name: "r",            type: "bytes32" },
+      { name: "s",            type: "bytes32" },
+    ],
+    outputs: [{ name: "id", type: "uint256" }], stateMutability: "nonpayable",
   },
   {
     type: "event", name: "Subscribed",

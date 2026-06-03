@@ -12,6 +12,11 @@
     "push-github-docs": "tsx ./src/push-github-docs.ts",
     "verify-contracts": "tsx ./src/verify-contracts.ts",
     "wallet-info": "tsx ./src/wallet-info.ts",
+    "compile-contracts": "tsx ./src/compile-contracts.ts",
+    "deploy-router-v2": "tsx ./src/deploy-router-v2.ts",
+    "deploy-batch-pay-v2": "tsx ./src/deploy-batch-pay-v2.ts",
+    "deploy-escrow-v2": "tsx ./src/deploy-escrow-v2.ts",
+    "deploy-subscription-manager-v2": "tsx ./src/deploy-subscription-manager-v2.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
@@ -19,6 +24,7 @@
     "tsx": "catalog:"
   },
   "dependencies": {
+    "solc": "^0.8.35",
     "viem": "^2.52.0"
   }
 }

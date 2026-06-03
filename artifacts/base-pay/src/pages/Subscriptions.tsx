@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
-import { isAddress, decodeEventLog } from "viem";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { isAddress, decodeEventLog, maxUint256 } from "viem";
 import {
-  USDC_ADDRESS, USDC_ABI, SUBSCRIPTION_MANAGER_ABI,
+  USDC_ADDRESS, SUBSCRIPTION_MANAGER_ABI,
   parseUSDC, formatUSDC, truncateAddress,
 } from "@/lib/wagmi";
+import { useUsdcPermit } from "@/lib/useUsdcPermit";
 import { WalletButton } from "@/components/Layout";
-import { BlockaidWarning } from "@/components/BlockaidWarning";
 
 const SUB_MANAGER_ADDRESS = (import.meta.env.VITE_SUBSCRIPTION_MANAGER_ADDRESS ?? "") as `0x${string}`;
 
@@ -16,45 +16,31 @@ const INTERVALS = [
   { label: "Monthly", seconds: 2_592_000n, display: "month" },
 ];
 
+// Far-future deadline for subscription permits — 2100-01-01 UTC
+const SUB_PERMIT_DEADLINE = 4_102_444_800n;
+
 export default function SubscriptionsPage() {
   const { address, isConnected } = useAccount();
   const [payee, setPayee]       = useState("");
   const [amount, setAmount]     = useState("");
   const [intervalIdx, setIntervalIdx] = useState(2);
   const [memo, setMemo]         = useState("");
-  const [step, setStep]         = useState<"idle" | "approving" | "subscribing" | "done">("idle");
+  const [step, setStep]         = useState<"idle" | "signing" | "subscribing" | "done">("idle");
+  const [isSigning, setIsSigning] = useState(false);
   const [subId, setSubId]       = useState<string | undefined>();
   const [txHash, setTxHash]     = useState<`0x${string}` | undefined>();
+  const [signError, setSignError] = useState<string | undefined>();
 
   const amountRaw  = amount && parseFloat(amount) > 0 ? parseUSDC(amount) : 0n;
   const feeRaw     = (amountRaw * 30n) / 10_000n;
   const netRaw     = amountRaw - feeRaw;
   const interval   = INTERVALS[intervalIdx];
 
-  // Approve exactly one period's gross amount.
-  // Approving only what the contract needs for the next charge is the safest pattern —
-  // security scanners like Blockaid flag large or unlimited approvals to pull-payment contracts.
-  // The user will be asked to re-approve before each charge once allowance drops below amountRaw.
-  const approvalCap = amountRaw; // exactly one charge
-
-  const { data: allowance } = useReadContract({
-    address: USDC_ADDRESS,
-    abi: USDC_ABI,
-    functionName: "allowance",
-    args: address ? [address, SUB_MANAGER_ADDRESS] : undefined,
-    query: { enabled: !!address && !!SUB_MANAGER_ADDRESS },
-  });
-
-  // Re-approve when remaining allowance falls below one full charge
-  const needsApproval = allowance !== undefined && amountRaw > 0n && allowance < amountRaw;
-
-  const { writeContract: writeApprove, data: approveTxHash, isPending: isApproving } = useWriteContract();
-  const { isSuccess: approveConfirmed } = useWaitForTransactionReceipt({ hash: approveTxHash });
+  const { signPermit } = useUsdcPermit(address);
 
   const { writeContract: writeSub, data: subTxHash, isPending: isSubPending, error: subError, reset } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: confirmed, data: receipt } = useWaitForTransactionReceipt({ hash: subTxHash });
 
-  // When subscribe tx confirms, extract the subscription ID and advance to done
   useEffect(() => {
     if (confirmed && step === "subscribing" && subTxHash && receipt) {
       let id: string | undefined;
@@ -73,48 +59,55 @@ export default function SubscriptionsPage() {
     }
   }, [confirmed, subTxHash, receipt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When approval confirms, automatically fire the subscribe transaction — no manual refresh needed
-  useEffect(() => {
-    if (approveConfirmed && step === "approving") {
+  async function handleSubscribe() {
+    if (!isAddress(payee) || !parseFloat(amount) || !SUB_MANAGER_ADDRESS) return;
+    setIsSigning(true);
+    setSignError(undefined);
+    try {
+      // Use max uint256 as permit amount so all future charges work without re-approval.
+      // Deadline set to year 2100 so the permit never needs to be renewed.
+      // The user explicitly signs this — their wallet shows exactly what they're allowing.
+      const { v, r, s } = await signPermit(
+        SUB_MANAGER_ADDRESS,
+        maxUint256,
+        Number(SUB_PERMIT_DEADLINE - BigInt(Math.floor(Date.now() / 1000))),
+      );
+      setIsSigning(false);
       setStep("subscribing");
       writeSub({
         address: SUB_MANAGER_ADDRESS,
         abi: SUBSCRIPTION_MANAGER_ABI,
-        functionName: "subscribe",
-        args: [USDC_ADDRESS, payee as `0x${string}`, amountRaw, interval.seconds, memo],
+        functionName: "subscribeWithPermit",
+        args: [
+          USDC_ADDRESS,
+          payee as `0x${string}`,
+          amountRaw,
+          interval.seconds,
+          memo,
+          maxUint256,
+          SUB_PERMIT_DEADLINE,
+          v, r, s,
+        ],
       });
+    } catch (err: unknown) {
+      setIsSigning(false);
+      setStep("idle");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.toLowerCase().includes("rejected") && !msg.toLowerCase().includes("denied")) {
+        setSignError(msg.slice(0, 120));
+      }
     }
-  }, [approveConfirmed]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function handleApprove() {
-    setStep("approving");
-    writeApprove({
-      address: USDC_ADDRESS,
-      abi: USDC_ABI,
-      functionName: "approve",
-      args: [SUB_MANAGER_ADDRESS, approvalCap],
-    });
-  }
-
-  function handleSubscribe() {
-    setStep("subscribing");
-    writeSub({
-      address: SUB_MANAGER_ADDRESS,
-      abi: SUBSCRIPTION_MANAGER_ABI,
-      functionName: "subscribe",
-      args: [USDC_ADDRESS, payee as `0x${string}`, amountRaw, interval.seconds, memo],
-    });
   }
 
   function handleReset() {
     reset();
     setPayee(""); setAmount(""); setMemo("");
-    setStep("idle"); setSubId(undefined); setTxHash(undefined);
+    setStep("idle"); setSubId(undefined); setTxHash(undefined); setSignError(undefined);
   }
 
   const isValidPayee  = isAddress(payee);
   const isValidAmount = parseFloat(amount) > 0;
-  const isBusy        = isApproving || isSubPending || isConfirming;
+  const isBusy        = isSigning || isSubPending || isConfirming;
   const canProceed    = isValidPayee && isValidAmount && !isBusy;
 
   if (!isConnected) {
@@ -126,26 +119,21 @@ export default function SubscriptionsPage() {
     );
   }
 
-  if (step === "approving") {
+  if (isSigning) {
     return (
-      <div className="max-w-md mx-auto space-y-4">
-        <div>
-          <h1 className="text-xl font-bold">Subscriptions</h1>
-          <p className="text-sm text-muted-foreground">Step 1 of 2 — Approve spending cap</p>
+      <div className="max-w-md mx-auto">
+        <div className="rounded-2xl border border-primary/20 bg-card p-8 text-center space-y-4">
+          <div className="w-14 h-14 rounded-full border border-primary/30 bg-primary/10 flex items-center justify-center mx-auto glow-pulse">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="hsl(221,83%,63%)" strokeWidth="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold">Sign message in wallet</h2>
+          <p className="text-sm text-muted-foreground">
+            One-time signature sets up your subscription — all future charges work automatically, no re-approval needed.
+          </p>
+          <p className="text-xs text-muted-foreground font-mono">Waiting for signature...</p>
         </div>
-        <div className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
-          Approving exactly <span className="font-semibold text-foreground">{amount || "—"} USDC</span> — one charge only. Your exposure is capped at a single period.
-        </div>
-        <BlockaidWarning
-          contractName="SubscriptionManager"
-          contractAddress="0x546093b0476b4b7909cd84f3a0fef813c421d14a"
-          proceedLabel={isApproving ? "Confirm in wallet..." : "Approve in Wallet"}
-          onProceed={() => {}}
-          onCancel={handleReset}
-        />
-        {isApproving && (
-          <p className="text-center text-xs text-muted-foreground font-mono">Waiting for wallet confirmation...</p>
-        )}
       </div>
     );
   }
@@ -187,7 +175,7 @@ export default function SubscriptionsPage() {
           </div>
 
           <p className="text-xs text-muted-foreground mb-3">
-            Keep your USDC balance and allowance topped up. Cancel anytime by calling <span className="font-mono">cancel(#{subId})</span> on BaseScan.
+            Keep your USDC balance funded. Cancel anytime by calling <span className="font-mono">cancel(#{subId})</span> on BaseScan.
           </p>
           <a href={`https://basescan.org/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
             className="block text-xs text-primary hover:underline mb-4 font-mono">{txHash.slice(0, 20)}...</a>
@@ -201,7 +189,7 @@ export default function SubscriptionsPage() {
     <div className="max-w-md mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Subscribe</h1>
-        <p className="text-muted-foreground text-sm mt-1">Set up recurring USDC payments to any address</p>
+        <p className="text-muted-foreground text-sm mt-1">Set up recurring USDC payments · Sign once, charges run automatically</p>
       </div>
 
       {!SUB_MANAGER_ADDRESS && (
@@ -210,8 +198,10 @@ export default function SubscriptionsPage() {
         </div>
       )}
 
-      {subError && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">{subError.message.split("\n")[0]}</div>
+      {(subError || signError) && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+          {signError ?? subError?.message.split("\n")[0]}
+        </div>
       )}
 
       <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
@@ -284,32 +274,15 @@ export default function SubscriptionsPage() {
       )}
 
       <div className="rounded-xl border border-border bg-secondary/50 px-4 py-3 text-xs text-muted-foreground space-y-1">
-        <p><span className="font-semibold text-foreground">How it works:</span> You approve exactly <span className="font-semibold text-foreground">{amount || "one period"} USDC</span>, then the payee triggers a charge once per {interval.display}. Your approval resets to one period each time — your exposure is always capped at a single charge.</p>
-        <p>Keep your USDC balance funded. You can cancel at any time.</p>
+        <p><span className="font-semibold text-foreground">How it works:</span> Sign one message in your wallet (no gas, no transaction) to authorise recurring charges. The payee triggers each charge once per {interval.display}.</p>
+        <p>Keep your USDC balance funded. Cancel anytime.</p>
       </div>
 
-      {/* Security notice — explains Blockaid warnings before the wallet opens */}
-      {needsApproval && isValidAmount && (
-        <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-xs text-yellow-300 space-y-1.5">
-          <p className="font-semibold text-yellow-200">⚠ Your wallet may show a security warning</p>
-          <p>Subscription contracts require a spending approval so charges can be collected each period. Your wallet's security scanner (e.g. Blockaid) may flag this as high-risk because it's a pull-payment pattern.</p>
-          <p>This contract is <a href="https://basescan.org/address/0x546093b0476b4b7909cd84f3a0fef813c421d14a#code" target="_blank" rel="noopener noreferrer" className="underline font-medium">open-source and verified on BaseScan</a>. You are approving exactly <span className="font-medium text-yellow-100">{amount} USDC</span> — one period only.</p>
-        </div>
-      )}
-
-      {needsApproval ? (
-        <button
-          onClick={handleApprove}
-          disabled={!canProceed || !SUB_MANAGER_ADDRESS}
-          className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
-        >Approve {amount ? `${amount} USDC` : "USDC"} for Subscriptions</button>
-      ) : (
-        <button
-          onClick={handleSubscribe}
-          disabled={!canProceed || !SUB_MANAGER_ADDRESS}
-          className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
-        >{isBusy ? "Processing…" : `Subscribe · ${amount || "0"} USDC / ${interval.display}`}</button>
-      )}
+      <button
+        onClick={handleSubscribe}
+        disabled={!canProceed || !SUB_MANAGER_ADDRESS}
+        className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
+      >{isBusy ? "Processing…" : `Subscribe · ${amount || "0"} USDC / ${interval.display}`}</button>
     </div>
   );
 }

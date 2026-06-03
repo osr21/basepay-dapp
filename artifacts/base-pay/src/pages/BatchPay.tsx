@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { isAddress } from "viem";
-import { BlockaidWarning } from "@/components/BlockaidWarning";
 import {
-  USDC_ADDRESS, USDC_ABI, BATCH_PAY_ABI,
-  parseUSDC, formatUSDC, truncateAddress,
+  USDC_ADDRESS, BATCH_PAY_ABI,
+  parseUSDC, truncateAddress,
 } from "@/lib/wagmi";
+import { useUsdcPermit } from "@/lib/useUsdcPermit";
 import { WalletButton } from "@/components/Layout";
 
 const BATCH_PAY_ADDRESS = (import.meta.env.VITE_BATCH_PAY_ADDRESS ?? "") as `0x${string}`;
@@ -16,27 +16,18 @@ function newRow(): Row { return { address: "", amount: "" }; }
 
 export default function BatchPayPage() {
   const { address, isConnected } = useAccount();
-  const [rows, setRows]   = useState<Row[]>([newRow(), newRow()]);
-  const [memo, setMemo]   = useState("");
-  const [step, setStep]   = useState<"idle" | "approving" | "sending" | "done">("idle");
+  const [rows, setRows]     = useState<Row[]>([newRow(), newRow()]);
+  const [memo, setMemo]     = useState("");
+  const [step, setStep]     = useState<"idle" | "signing" | "sending" | "done">("idle");
+  const [isSigning, setIsSigning] = useState(false);
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const [signError, setSignError] = useState<string | undefined>();
 
-  const validRows = rows.filter(r => isAddress(r.address) && parseFloat(r.amount) > 0);
-  const totalGross = validRows.reduce((s, r) => s + parseFloat(r.amount), 0);
-  const totalGrossRaw = validRows.reduce((s, r) => s + parseUSDC(r.amount), 0n);
+  const validRows      = rows.filter(r => isAddress(r.address) && parseFloat(r.amount) > 0);
+  const totalGross     = validRows.reduce((s, r) => s + parseFloat(r.amount), 0);
+  const totalGrossRaw  = validRows.reduce((s, r) => s + parseUSDC(r.amount), 0n);
 
-  const { data: allowance } = useReadContract({
-    address: USDC_ADDRESS,
-    abi: USDC_ABI,
-    functionName: "allowance",
-    args: address ? [address, BATCH_PAY_ADDRESS] : undefined,
-    query: { enabled: !!address && !!BATCH_PAY_ADDRESS },
-  });
-
-  const needsApproval = allowance !== undefined && totalGrossRaw > 0n && allowance < totalGrossRaw;
-
-  const { writeContract: writeApprove, data: approveTxHash, isPending: isApproving } = useWriteContract();
-  const { isSuccess: approveConfirmed } = useWaitForTransactionReceipt({ hash: approveTxHash });
+  const { signPermit } = useUsdcPermit(address);
 
   const { writeContract: writeSend, data: sendTxHash, isPending: isSending, error: sendError, reset } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: confirmed } = useWaitForTransactionReceipt({ hash: sendTxHash });
@@ -46,37 +37,40 @@ export default function BatchPayPage() {
     setStep("done");
   }
 
-  if (approveConfirmed && step === "approving") {
-    setStep("idle");
-  }
-
   function updateRow(i: number, field: keyof Row, val: string) {
     setRows(rows.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
   }
 
-  function handleApprove() {
-    setStep("approving");
-    writeApprove({
-      address: USDC_ADDRESS,
-      abi: USDC_ABI,
-      functionName: "approve",
-      args: [BATCH_PAY_ADDRESS, totalGrossRaw],
-    });
-  }
-
-  function handleSend() {
-    setStep("sending");
-    writeSend({
-      address: BATCH_PAY_ADDRESS,
-      abi: BATCH_PAY_ABI,
-      functionName: "batchSend",
-      args: [
-        USDC_ADDRESS,
-        validRows.map(r => r.address as `0x${string}`),
-        validRows.map(r => parseUSDC(r.amount)),
-        memo,
-      ],
-    });
+  async function handleSend() {
+    if (validRows.length === 0 || !BATCH_PAY_ADDRESS) return;
+    setIsSigning(true);
+    setSignError(undefined);
+    try {
+      const { v, r, s, deadline } = await signPermit(BATCH_PAY_ADDRESS, totalGrossRaw);
+      setIsSigning(false);
+      setStep("sending");
+      writeSend({
+        address: BATCH_PAY_ADDRESS,
+        abi: BATCH_PAY_ABI,
+        functionName: "batchSendWithPermit",
+        args: [
+          USDC_ADDRESS,
+          validRows.map(r => r.address as `0x${string}`),
+          validRows.map(r => parseUSDC(r.amount)),
+          memo,
+          totalGrossRaw,
+          deadline,
+          v, r, s,
+        ],
+      });
+    } catch (err: unknown) {
+      setIsSigning(false);
+      setStep("idle");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.toLowerCase().includes("rejected") && !msg.toLowerCase().includes("denied")) {
+        setSignError(msg.slice(0, 120));
+      }
+    }
   }
 
   function handleReset() {
@@ -85,9 +79,10 @@ export default function BatchPayPage() {
     setMemo("");
     setStep("idle");
     setTxHash(undefined);
+    setSignError(undefined);
   }
 
-  const isBusy = isApproving || isSending || isConfirming;
+  const isBusy = isSigning || isSending || isConfirming;
   const canProceed = validRows.length >= 1 && !isBusy;
 
   if (!isConnected) {
@@ -99,28 +94,26 @@ export default function BatchPayPage() {
     );
   }
 
-  if (step === "approving") {
+  if (isSigning) {
     return (
-      <div className="max-w-md mx-auto space-y-4">
-        <div>
-          <h1 className="text-xl font-bold">Batch Pay</h1>
-          <p className="text-sm text-muted-foreground">Step 1 of 2 — Approve BatchPay contract</p>
+      <div className="max-w-md mx-auto">
+        <div className="rounded-2xl border border-primary/20 bg-card p-8 text-center space-y-4">
+          <div className="w-14 h-14 rounded-full border border-primary/30 bg-primary/10 flex items-center justify-center mx-auto glow-pulse">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="hsl(221,83%,63%)" strokeWidth="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold">Sign message in wallet</h2>
+          <p className="text-sm text-muted-foreground">
+            Off-chain permit covering <span className="text-foreground font-semibold">{totalGross.toFixed(4)} USDC</span> — no gas, no approval transaction.
+          </p>
+          <p className="text-xs text-muted-foreground font-mono">Waiting for signature...</p>
         </div>
-        <BlockaidWarning
-          contractName="BatchPay"
-          contractAddress="0x82569caf7847040a03ad2c6545ade5af2bdcf47c"
-          proceedLabel={isApproving ? "Confirm in wallet..." : "Approve in Wallet"}
-          onProceed={() => {}}
-          onCancel={handleReset}
-        />
-        {isApproving && (
-          <p className="text-center text-xs text-muted-foreground font-mono">Waiting for wallet confirmation...</p>
-        )}
       </div>
     );
   }
 
-  if (step === "sending" || (step === "done" && !txHash)) {
+  if (step === "sending") {
     return (
       <div className="max-w-md mx-auto">
         <div className="rounded-2xl border border-primary/20 bg-card p-8 text-center space-y-4">
@@ -164,7 +157,7 @@ export default function BatchPayPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Batch Pay</h1>
-        <p className="text-muted-foreground text-sm mt-1">Send USDC to multiple addresses in one transaction</p>
+        <p className="text-muted-foreground text-sm mt-1">Send USDC to multiple addresses in one transaction · Sign a message, no approval needed</p>
       </div>
 
       {!BATCH_PAY_ADDRESS && (
@@ -173,8 +166,10 @@ export default function BatchPayPage() {
         </div>
       )}
 
-      {sendError && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">{sendError.message.split("\n")[0]}</div>
+      {(sendError || signError) && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+          {signError ?? sendError?.message.split("\n")[0]}
+        </div>
       )}
 
       <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
@@ -258,19 +253,13 @@ export default function BatchPayPage() {
         </div>
       )}
 
-      {needsApproval ? (
-        <button
-          onClick={handleApprove}
-          disabled={!canProceed || !BATCH_PAY_ADDRESS}
-          className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
-        >Approve USDC for BatchPay</button>
-      ) : (
-        <button
-          onClick={handleSend}
-          disabled={!canProceed || !BATCH_PAY_ADDRESS}
-          className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
-        >{isBusy ? "Processing…" : `Send to ${validRows.length} recipient${validRows.length !== 1 ? "s" : ""}`}</button>
-      )}
+      <button
+        onClick={handleSend}
+        disabled={!canProceed || !BATCH_PAY_ADDRESS}
+        className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
+      >
+        {isBusy ? "Processing…" : `Send to ${validRows.length} recipient${validRows.length !== 1 ? "s" : ""}`}
+      </button>
     </div>
   );
 }

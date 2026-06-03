@@ -8,6 +8,9 @@ interface Props {
   proceedLabel?: string;
 }
 
+const BLOCKAID_REPORT_URL = "https://app.blockaid.io/report-dapp";
+const WALLETCONNECT_CLOUD_URL = "https://cloud.walletconnect.com";
+
 export function BlockaidWarning({ contractName, contractAddress, onProceed, onCancel, proceedLabel = "Proceed with Approval" }: Props) {
   const [expanded, setExpanded] = useState(false);
   const basescanUrl = `https://basescan.org/address/${contractAddress}#code`;
@@ -23,9 +26,9 @@ export function BlockaidWarning({ contractName, contractAddress, onProceed, onCa
           </svg>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-amber-400">Your wallet may show a security warning</p>
+          <p className="text-sm font-semibold text-amber-400">Your wallet will show a security warning</p>
           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-            <strong className="text-foreground">{contractName}</strong> is a newly deployed contract — wallet security scanners (Blockaid) flag all new contracts as "untrusted" until they are reviewed. This is a <span className="text-amber-400 font-medium">false positive</span>.
+            <strong className="text-foreground">{contractName}</strong> is a newly deployed contract. Blockaid flags all unreviewed contracts — this is a <span className="text-amber-400 font-medium">false positive</span>.
           </p>
         </div>
       </div>
@@ -43,8 +46,9 @@ export function BlockaidWarning({ contractName, contractAddress, onProceed, onCa
       {expanded && (
         <div className="text-xs text-muted-foreground space-y-2 bg-background/40 rounded-lg p-3 border border-amber-500/10">
           <p>✅ <span className="text-foreground font-medium">Source-verified on BaseScan</span> — the contract code is public and auditable.</p>
-          <p>✅ <span className="text-foreground font-medium">Approval is exact</span> — you are approving only the amount needed for this transaction, not unlimited access.</p>
-          <p>✅ <span className="text-foreground font-medium">CEI pattern</span> — the contract updates state before any external call, preventing reentrancy.</p>
+          <p>✅ <span className="text-foreground font-medium">Approval is exact</span> — you are approving only the amount for this transaction, not unlimited access.</p>
+          <p>✅ <span className="text-foreground font-medium">CEI pattern</span> — the contract updates state before external calls, preventing reentrancy.</p>
+          <p>✅ <span className="text-foreground font-medium">Contract address:</span> <span className="font-mono text-foreground break-all">{contractAddress}</span></p>
           <a
             href={basescanUrl}
             target="_blank"
@@ -78,9 +82,37 @@ export function BlockaidWarning({ contractName, contractAddress, onProceed, onCa
         </button>
       </div>
 
-      <p className="text-[10px] text-muted-foreground/60 text-center">
-        You can click <span className="font-medium">"Report an issue"</span> in the wallet warning to help Blockaid whitelist this contract faster.
-      </p>
+      <div className="rounded-lg bg-background/40 border border-border/50 p-3 space-y-2">
+        <p className="text-[11px] font-semibold text-foreground">To permanently remove this warning:</p>
+        <div className="space-y-1.5">
+          <div className="flex items-start gap-2">
+            <span className="text-[10px] bg-primary/20 text-primary rounded-full px-1.5 py-0.5 font-bold flex-shrink-0 mt-0.5">1</span>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              In the wallet warning, tap <span className="text-foreground font-medium">"Report an issue"</span> → select "False positive / legitimate dApp". This sends data directly to Blockaid.
+            </p>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-[10px] bg-primary/20 text-primary rounded-full px-1.5 py-0.5 font-bold flex-shrink-0 mt-0.5">2</span>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Submit the contract at{" "}
+              <a href={BLOCKAID_REPORT_URL} target="_blank" rel="noreferrer" className="text-primary hover:underline font-medium">
+                app.blockaid.io/report-dapp ↗
+              </a>
+              {" "}— Blockaid reviews and whitelists within 1–2 weeks.
+            </p>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-[10px] bg-primary/20 text-primary rounded-full px-1.5 py-0.5 font-bold flex-shrink-0 mt-0.5">3</span>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Register on{" "}
+              <a href={WALLETCONNECT_CLOUD_URL} target="_blank" rel="noreferrer" className="text-primary hover:underline font-medium">
+                WalletConnect Cloud ↗
+              </a>
+              {" "}with your domain — gives wallets a verified app identity badge.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -9,6 +9,10 @@ const FEE_ADDR    = process.env.FEE_COLLECTOR_ADDRESS   ?? DEPLOYER;
 const FEE_BPS     = parseInt(process.env.FEE_BPS ?? "30", 10);
 const ROUTER_ADDR = process.env.VITE_ROUTER_ADDRESS    ?? null;
 
+// In-memory cache — populated on first successful DB read.
+// Invalidated only when ROUTER_ADDR differs from the stored value (env sync).
+let cachedConfig: typeof appRegistrationTable.$inferSelect | null = null;
+
 function serialize(r: typeof appRegistrationTable.$inferSelect) {
   return {
     ...r,
@@ -18,19 +22,28 @@ function serialize(r: typeof appRegistrationTable.$inferSelect) {
 }
 
 async function ensureRegistration() {
+  // Return cache if populated and no env-driven router address to sync
+  if (cachedConfig) {
+    if (!ROUTER_ADDR || cachedConfig.routerAddress === ROUTER_ADDR) {
+      return cachedConfig;
+    }
+  }
+
   const [existing] = await db.select().from(appRegistrationTable).where(eq(appRegistrationTable.id, 1));
   if (existing) {
-    // If env vars supply a router address that differs from what's stored, sync it
     if (ROUTER_ADDR && existing.routerAddress !== ROUTER_ADDR) {
       const [updated] = await db
         .update(appRegistrationTable)
-        .set({ routerAddress: ROUTER_ADDR })
+        .set({ routerAddress: ROUTER_ADDR, updatedAt: new Date() })
         .where(eq(appRegistrationTable.id, 1))
         .returning();
+      cachedConfig = updated;
       return updated;
     }
+    cachedConfig = existing;
     return existing;
   }
+
   const [created] = await db
     .insert(appRegistrationTable)
     .values({
@@ -46,6 +59,7 @@ async function ensureRegistration() {
       verified:            DEPLOYER.startsWith("0x"),
     })
     .returning();
+  cachedConfig = created;
   return created;
 }
 
@@ -53,6 +67,8 @@ async function ensureRegistration() {
  * GET /api/app/config
  * Returns the app registration (fee settings, router address, etc.).
  * Config is seeded from server env vars — no unauthenticated write endpoint is exposed.
+ * Result is cached in memory after the first DB read; only re-queries if ROUTER_ADDR
+ * differs from the cached value (env-driven sync on new deploy).
  */
 router.get("/app/config", async (_req, res) => {
   const reg = await ensureRegistration();

@@ -19,15 +19,23 @@ function serializeRow(r: typeof paymentRequestsTable.$inferSelect) {
   };
 }
 
+/**
+ * GET /api/payment-requests?recipientAddress=0x...
+ * recipientAddress is required — we never expose the full payment requests table.
+ */
 router.get("/payment-requests", async (req, res) => {
   const parsed = ListPaymentRequestsQueryParams.safeParse(req.query);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid query params" });
   }
   const { recipientAddress } = parsed.data;
-  const rows = recipientAddress
-    ? await db.select().from(paymentRequestsTable).where(eq(paymentRequestsTable.recipientAddress, recipientAddress))
-    : await db.select().from(paymentRequestsTable);
+  if (!recipientAddress) {
+    return res.status(400).json({ error: "recipientAddress is required" });
+  }
+  const rows = await db
+    .select()
+    .from(paymentRequestsTable)
+    .where(eq(paymentRequestsTable.recipientAddress, recipientAddress));
   return res.json(rows.map(serializeRow));
 });
 
@@ -54,13 +62,13 @@ router.get("/payment-requests/:id", async (req, res) => {
 
 router.patch("/payment-requests/:id", async (req, res) => {
   const paramsParsed = UpdatePaymentRequestParams.safeParse(req.params);
-  const bodyParsed = UpdatePaymentRequestBody.safeParse(req.body);
+  const bodyParsed   = UpdatePaymentRequestBody.safeParse(req.body);
   if (!paramsParsed.success || !bodyParsed.success) {
     return res.status(400).json({ error: "Invalid request" });
   }
   const updates: Record<string, unknown> = {};
-  if (bodyParsed.data.status) updates.status = bodyParsed.data.status;
-  if (bodyParsed.data.paidTxHash) updates.paidTxHash = bodyParsed.data.paidTxHash;
+  if (bodyParsed.data.status)      updates.status     = bodyParsed.data.status;
+  if (bodyParsed.data.paidTxHash)  updates.paidTxHash = bodyParsed.data.paidTxHash;
   if (bodyParsed.data.status === "paid") updates.paidAt = new Date();
 
   const [row] = await db

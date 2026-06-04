@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { isAddress, decodeEventLog } from "viem";
 import {
-  USDC_ADDRESS, ESCROW_ABI,
+  USDC_ADDRESS, ESCROW_ABI, FEE_BPS,
   parseUSDC, formatUSDC, truncateAddress,
 } from "@/lib/wagmi";
 import { useUsdcPermit } from "@/lib/useUsdcPermit";
@@ -30,7 +30,7 @@ export default function EscrowPage() {
   const [signError, setSignError] = useState<string | undefined>();
 
   const amountRaw = amount && parseFloat(amount) > 0 ? parseUSDC(amount) : 0n;
-  const feeRaw    = (amountRaw * 30n) / 10_000n;
+  const feeRaw    = (amountRaw * BigInt(FEE_BPS)) / 10_000n;
   const netRaw    = amountRaw - feeRaw;
 
   const { signPermit } = useUsdcPermit(address);
@@ -146,7 +146,7 @@ export default function EscrowPage() {
 
           <div className="text-xs text-muted-foreground bg-secondary rounded-lg px-3 py-2 mb-4 space-y-1 text-left">
             <div className="flex justify-between"><span>Locked amount</span><span>{amount} USDC</span></div>
-            <div className="flex justify-between text-primary"><span>Fee on release (0.30%)</span><span>−{formatUSDC(feeRaw)} USDC</span></div>
+            <div className="flex justify-between text-primary"><span>Fee on release ({(FEE_BPS / 100).toFixed(2)}%)</span><span>−{formatUSDC(feeRaw)} USDC</span></div>
             <div className="flex justify-between font-semibold text-foreground"><span>Payee receives</span><span>{formatUSDC(netRaw)} USDC</span></div>
             <div className="flex justify-between"><span>Expires</span><span>{DURATIONS[ttlIdx].label} from now</span></div>
           </div>
@@ -243,7 +243,7 @@ export default function EscrowPage() {
         <div className="rounded-2xl border border-border bg-card p-5 space-y-1.5 text-sm">
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Breakdown</h2>
           <div className="flex justify-between text-muted-foreground"><span>You lock</span><span>{amount} USDC</span></div>
-          <div className="flex justify-between text-primary"><span>Fee on release (0.30%)</span><span>−{formatUSDC(feeRaw)} USDC</span></div>
+          <div className="flex justify-between text-primary"><span>Fee on release ({(FEE_BPS / 100).toFixed(2)}%)</span><span>−{formatUSDC(feeRaw)} USDC</span></div>
           <div className="flex justify-between font-semibold text-foreground border-t border-border pt-2 mt-2">
             <span>Payee receives</span><span>{formatUSDC(netRaw)} USDC</span>
           </div>

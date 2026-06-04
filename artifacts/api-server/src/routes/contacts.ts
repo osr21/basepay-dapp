@@ -16,7 +16,6 @@ router.get("/contacts", async (req, res) => {
     return res.status(400).json({ error: "Invalid query params" });
   }
   const { ownerAddress } = parsed.data;
-  // ownerAddress is required — we never expose the full contacts table
   if (!ownerAddress) {
     return res.status(400).json({ error: "ownerAddress is required" });
   }

@@ -7,6 +7,7 @@ import { truncateAddress } from "@/lib/wagmi";
 const NAV = [
   { path: "/",             label: "Dashboard",   icon: HomeIcon         },
   { path: "/send",         label: "Send",        icon: SendIcon         },
+  { path: "/gasless",      label: "Gasless",     icon: GaslessIcon, badge: "0 gas" },
   { path: "/batch-pay",    label: "Batch Pay",   icon: BatchIcon        },
   { path: "/request",      label: "Request",     icon: RequestIcon      },
   { path: "/requests",     label: "My Requests", icon: ListIcon         },
@@ -18,6 +19,9 @@ const NAV = [
 
 function HomeIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+}
+function GaslessIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>;
 }
 function SendIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" x2="11" y1="2" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
@@ -108,7 +112,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {NAV.map(({ path, label, icon: Icon }) => {
+          {NAV.map(({ path, label, icon: Icon, badge }) => {
             const active = location === path || (path !== "/" && location.startsWith(path));
             return (
               <Link
@@ -122,6 +126,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               >
                 <Icon />
                 <span className="flex-1">{label}</span>
+                {badge && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 text-[10px] font-semibold leading-none">{badge}</span>
+                )}
                 {path === "/app-info" && isVerified && (
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
                 )}

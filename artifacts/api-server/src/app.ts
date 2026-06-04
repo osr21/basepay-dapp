@@ -52,6 +52,7 @@ const writeLimiter = rateLimit({
 });
 app.use("/api/contacts", writeLimiter);
 app.use("/api/payment-requests", writeLimiter);
+app.use("/api/gasless", writeLimiter);
 
 app.use(
   pinoHttp({

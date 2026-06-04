@@ -147,6 +147,40 @@ export const UpdatePaymentRequestResponse = zod.object({
 
 
 /**
+ * @summary Get gasless relay fee info
+ */
+export const GetGaslessFeeResponse = zod.object({
+  "relayFeeUsdc": zod.string().describe('USDC fee charged per relay (e.g. \"0.00\" = free)'),
+  "relayerReady": zod.boolean().describe('Whether the relayer wallet has enough ETH to submit txs'),
+  "relayerEthBalance": zod.string().optional().describe('Relayer ETH balance in ether (human-readable)'),
+  "networkName": zod.string().describe('Network name (e.g. \"Base Mainnet\")')
+})
+
+
+/**
+ * @summary Submit a gasless USDC transfer via EIP-3009
+ */
+export const SubmitGaslessTransferBody = zod.object({
+  "from": zod.string().describe('Sender address (signer of the authorization)'),
+  "to": zod.string().describe('Recipient address'),
+  "value": zod.string().describe('Amount in USDC atomic units (6 decimals), as decimal string'),
+  "validAfter": zod.string().describe('Unix timestamp after which the authorization is valid'),
+  "validBefore": zod.string().describe('Unix timestamp before which the authorization expires'),
+  "nonce": zod.string().describe('Random bytes32 nonce as hex string (0x-prefixed)'),
+  "v": zod.number().describe('Signature v component'),
+  "r": zod.string().describe('Signature r component (0x-prefixed hex)'),
+  "s": zod.string().describe('Signature s component (0x-prefixed hex)')
+})
+
+export const SubmitGaslessTransferResponse = zod.object({
+  "txHash": zod.string().describe('On-chain transaction hash of the relayed transfer'),
+  "from": zod.string(),
+  "to": zod.string(),
+  "value": zod.string().describe('USDC amount transferred in atomic units')
+})
+
+
+/**
  * @summary Get payment stats for a wallet address
  */
 export const GetStatsParams = zod.object({

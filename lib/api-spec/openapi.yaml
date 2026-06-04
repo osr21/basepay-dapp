@@ -17,6 +17,8 @@ tags:
     description: Payment statistics
   - name: app
     description: dApp registration and configuration
+  - name: gasless
+    description: Gasless USDC transfers via EIP-3009 relayer
 
 paths:
   /healthz:
@@ -180,6 +182,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PaymentRequest"
+
+  /gasless/fee:
+    get:
+      operationId: getGaslessFee
+      tags: [gasless]
+      summary: Get gasless relay fee info
+      responses:
+        "200":
+          description: Relay fee information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GaslessFeeInfo"
+
+  /gasless/transfer:
+    post:
+      operationId: submitGaslessTransfer
+      tags: [gasless]
+      summary: Submit a gasless USDC transfer via EIP-3009
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GaslessTransferInput"
+      responses:
+        "200":
+          description: Transfer relayed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GaslessTransferResult"
+        "400":
+          description: Invalid input or nonce already used
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Relay failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /stats/{address}:
     get:
@@ -389,6 +435,70 @@ components:
           maximum: 1000
         routerAddress:
           type: string
+
+    GaslessFeeInfo:
+      type: object
+      required: [relayFeeUsdc, relayerReady, networkName]
+      properties:
+        relayFeeUsdc:
+          type: string
+          description: USDC fee charged per relay (e.g. "0.00" = free)
+        relayerReady:
+          type: boolean
+          description: Whether the relayer wallet has enough ETH to submit txs
+        relayerEthBalance:
+          type: string
+          description: Relayer ETH balance in ether (human-readable)
+        networkName:
+          type: string
+          description: Network name (e.g. "Base Mainnet")
+
+    GaslessTransferInput:
+      type: object
+      required: [from, to, value, validAfter, validBefore, nonce, v, r, s]
+      properties:
+        from:
+          type: string
+          description: Sender address (signer of the authorization)
+        to:
+          type: string
+          description: Recipient address
+        value:
+          type: string
+          description: Amount in USDC atomic units (6 decimals), as decimal string
+        validAfter:
+          type: string
+          description: Unix timestamp after which the authorization is valid
+        validBefore:
+          type: string
+          description: Unix timestamp before which the authorization expires
+        nonce:
+          type: string
+          description: Random bytes32 nonce as hex string (0x-prefixed)
+        v:
+          type: integer
+          description: Signature v component
+        r:
+          type: string
+          description: Signature r component (0x-prefixed hex)
+        s:
+          type: string
+          description: Signature s component (0x-prefixed hex)
+
+    GaslessTransferResult:
+      type: object
+      required: [txHash, from, to, value]
+      properties:
+        txHash:
+          type: string
+          description: On-chain transaction hash of the relayed transfer
+        from:
+          type: string
+        to:
+          type: string
+        value:
+          type: string
+          description: USDC amount transferred in atomic units
 
     ErrorResponse:
       type: object

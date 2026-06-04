@@ -27,6 +27,9 @@ import type {
   DeleteContactParams,
   DeleteResult,
   ErrorResponse,
+  GaslessFeeInfo,
+  GaslessTransferInput,
+  GaslessTransferResult,
   HealthStatus,
   ListContactsParams,
   ListPaymentRequestsParams,
@@ -661,6 +664,154 @@ export const useUpdatePaymentRequest = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdatePaymentRequestMutationOptions(options));
+    }
+
+export const getGetGaslessFeeUrl = () => {
+
+
+
+
+  return `/api/gasless/fee`
+}
+
+/**
+ * @summary Get gasless relay fee info
+ */
+export const getGaslessFee = async ( options?: RequestInit): Promise<GaslessFeeInfo> => {
+
+  return customFetch<GaslessFeeInfo>(getGetGaslessFeeUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGaslessFeeQueryKey = () => {
+    return [
+    `/api/gasless/fee`
+    ] as const;
+    }
+
+
+export const getGetGaslessFeeQueryOptions = <TData = Awaited<ReturnType<typeof getGaslessFee>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGaslessFee>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGaslessFeeQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGaslessFee>>> = ({ signal }) => getGaslessFee({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGaslessFee>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGaslessFeeQueryResult = NonNullable<Awaited<ReturnType<typeof getGaslessFee>>>
+export type GetGaslessFeeQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get gasless relay fee info
+ */
+
+export function useGetGaslessFee<TData = Awaited<ReturnType<typeof getGaslessFee>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGaslessFee>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGaslessFeeQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSubmitGaslessTransferUrl = () => {
+
+
+
+
+  return `/api/gasless/transfer`
+}
+
+/**
+ * @summary Submit a gasless USDC transfer via EIP-3009
+ */
+export const submitGaslessTransfer = async (gaslessTransferInput: GaslessTransferInput, options?: RequestInit): Promise<GaslessTransferResult> => {
+
+  return customFetch<GaslessTransferResult>(getSubmitGaslessTransferUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      gaslessTransferInput,)
+  }
+);}
+
+
+
+
+export const getSubmitGaslessTransferMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitGaslessTransfer>>, TError,{data: BodyType<GaslessTransferInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitGaslessTransfer>>, TError,{data: BodyType<GaslessTransferInput>}, TContext> => {
+
+const mutationKey = ['submitGaslessTransfer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitGaslessTransfer>>, {data: BodyType<GaslessTransferInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitGaslessTransfer(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitGaslessTransferMutationResult = NonNullable<Awaited<ReturnType<typeof submitGaslessTransfer>>>
+    export type SubmitGaslessTransferMutationBody = BodyType<GaslessTransferInput>
+    export type SubmitGaslessTransferMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Submit a gasless USDC transfer via EIP-3009
+ */
+export const useSubmitGaslessTransfer = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitGaslessTransfer>>, TError,{data: BodyType<GaslessTransferInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitGaslessTransfer>>,
+        TError,
+        {data: BodyType<GaslessTransferInput>},
+        TContext
+      > => {
+      return useMutation(getSubmitGaslessTransferMutationOptions(options));
     }
 
 export const getGetStatsUrl = (address: string,) => {

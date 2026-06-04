@@ -130,6 +130,47 @@ export interface AppRegisterInput {
   routerAddress?: string;
 }
 
+export interface GaslessFeeInfo {
+  /** USDC fee charged per relay (e.g. "0.00" = free) */
+  relayFeeUsdc: string;
+  /** Whether the relayer wallet has enough ETH to submit txs */
+  relayerReady: boolean;
+  /** Relayer ETH balance in ether (human-readable) */
+  relayerEthBalance?: string;
+  /** Network name (e.g. "Base Mainnet") */
+  networkName: string;
+}
+
+export interface GaslessTransferInput {
+  /** Sender address (signer of the authorization) */
+  from: string;
+  /** Recipient address */
+  to: string;
+  /** Amount in USDC atomic units (6 decimals), as decimal string */
+  value: string;
+  /** Unix timestamp after which the authorization is valid */
+  validAfter: string;
+  /** Unix timestamp before which the authorization expires */
+  validBefore: string;
+  /** Random bytes32 nonce as hex string (0x-prefixed) */
+  nonce: string;
+  /** Signature v component */
+  v: number;
+  /** Signature r component (0x-prefixed hex) */
+  r: string;
+  /** Signature s component (0x-prefixed hex) */
+  s: string;
+}
+
+export interface GaslessTransferResult {
+  /** On-chain transaction hash of the relayed transfer */
+  txHash: string;
+  from: string;
+  to: string;
+  /** USDC amount transferred in atomic units */
+  value: string;
+}
+
 export interface ErrorResponse {
   error: string;
 }

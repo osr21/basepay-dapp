@@ -1,0 +1,2 @@
+- [Gasless Transfer Architecture](gasless-transfer.md) — EIP-3009 relayer via DEPLOYER_PRIVATE_KEY; USDC on Base supports transferWithAuthorization
+- [BaseScan V2 Verification](basescan-verification.md) — must use Etherscan V2 API with chainid in URL query string, not POST body

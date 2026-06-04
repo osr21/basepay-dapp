@@ -3,7 +3,7 @@ import { useAccount } from "wagmi";
 import { isAddress } from "viem";
 import { useGetGaslessFee, useSubmitGaslessTransfer } from "@workspace/api-client-react";
 import { useListContacts } from "@workspace/api-client-react";
-import { USDC_DECIMALS, parseUSDC, truncateAddress } from "@/lib/wagmi";
+import { parseUSDC, truncateAddress } from "@/lib/wagmi";
 import { useUsdcAuthorization } from "@/lib/useUsdcAuthorization";
 import { WalletButton } from "@/components/Layout";
 
@@ -14,7 +14,6 @@ export default function GaslessTransferPage() {
 
   const [to,       setTo]       = useState("");
   const [amount,   setAmount]   = useState("");
-  const [memo,     setMemo]     = useState("");
   const [showContacts, setShowContacts] = useState(false);
   const [step,     setStep]     = useState<Step>("idle");
   const [txHash,   setTxHash]   = useState<string | undefined>();
@@ -75,7 +74,7 @@ export default function GaslessTransferPage() {
   }
 
   function handleReset() {
-    setTo(""); setAmount(""); setMemo("");
+    setTo(""); setAmount("");
     setStep("idle"); setTxHash(undefined); setError(undefined);
   }
 
@@ -131,8 +130,7 @@ export default function GaslessTransferPage() {
 
   // ── Success ────────────────────────────────────────────────────────────────
   if (step === "done") {
-    const atomicVal = parseUSDC(amount);
-    const humanVal  = (Number(atomicVal) / 10 ** USDC_DECIMALS).toFixed(2);
+    const humanVal = parseFloat(amount).toFixed(2);
     return (
       <div className="max-w-md mx-auto space-y-4">
         <div className="rounded-2xl border border-green-500/20 bg-green-500/5 p-8 text-center">
@@ -150,9 +148,6 @@ export default function GaslessTransferPage() {
             Zero gas paid — relayed by BasePay
           </div>
 
-          {memo && (
-            <p className="text-xs text-muted-foreground mb-4 italic">"{memo}"</p>
-          )}
 
           {txHash && (
             <a
@@ -301,18 +296,6 @@ export default function GaslessTransferPage() {
             </div>
           </div>
         )}
-
-        {/* Memo */}
-        <div>
-          <label className="text-sm font-medium block mb-1.5">Memo <span className="text-muted-foreground font-normal">(optional)</span></label>
-          <input
-            type="text"
-            placeholder="What's this for?"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-lg border border-border bg-secondary text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-all"
-          />
-        </div>
 
         {/* Error */}
         {error && (

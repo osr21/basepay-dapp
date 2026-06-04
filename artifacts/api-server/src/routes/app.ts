@@ -75,4 +75,15 @@ router.get("/app/config", async (_req, res) => {
   return res.json(serialize(reg));
 });
 
+/**
+ * POST /api/app/config
+ * Idempotent registration endpoint (matches the OpenAPI spec operationId: registerApp).
+ * Config is controlled by server env vars; this endpoint simply ensures the row exists
+ * and returns the current state — callers cannot override env-sourced values.
+ */
+router.post("/app/config", async (_req, res) => {
+  const reg = await ensureRegistration();
+  return res.status(200).json(serialize(reg));
+});
+
 export default router;

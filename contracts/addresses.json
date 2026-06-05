@@ -1,0 +1,49 @@
+{
+  "network": "Base Mainnet",
+  "chainId": 8453,
+  "rpcUrl": "https://mainnet.base.org",
+  "explorerUrl": "https://basescan.org",
+  "deployedAt": "2026-06-04",
+  "contracts": {
+    "BasePayRouterV2": {
+      "address": "0x756f516cdf5eb98e140eba44119b22fc0f0bb63f",
+      "basescan": "https://basescan.org/address/0x756f516cdf5eb98e140eba44119b22fc0f0bb63f#code",
+      "abi": "./BasePayRouterV2.json",
+      "description": "Routes ERC-20 payments with an on-chain fee split. Supports EIP-2612 permit (gasless approve) via sendWithPermit."
+    },
+    "BatchPayV2": {
+      "address": "0xe40d2292c050566d16cecda74627b70778806c68",
+      "basescan": "https://basescan.org/address/0xe40d2292c050566d16cecda74627b70778806c68#code",
+      "abi": "./BatchPayV2.json",
+      "description": "Sends ERC-20 to up to 200 recipients in a single transaction. Supports EIP-2612 permit via batchSendWithPermit."
+    },
+    "EscrowV2": {
+      "address": "0x1eb2b1e8dda64fc4ccb0537574f2a2ca9f307499",
+      "basescan": "https://basescan.org/address/0x1eb2b1e8dda64fc4ccb0537574f2a2ca9f307499#code",
+      "abi": "./EscrowV2.json",
+      "description": "Time-locked escrow for ERC-20 tokens. Payer releases or reclaims after TTL. Supports EIP-2612 permit via createWithPermit."
+    },
+    "SubscriptionManagerV2": {
+      "address": "0x101918a252b3852ac4b50b7bbf2525d3084d5421",
+      "basescan": "https://basescan.org/address/0x101918a252b3852ac4b50b7bbf2525d3084d5421#code",
+      "abi": "./SubscriptionManagerV2.json",
+      "description": "On-chain recurring ERC-20 payments at fixed intervals. Anyone can call charge() once per interval. Supports EIP-2612 permit via subscribeWithPermit."
+    }
+  },
+  "tokens": {
+    "USDC": {
+      "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "decimals": 6,
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "basescan": "https://basescan.org/token/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    }
+  },
+  "relayer": {
+    "address": "0xdb5019b8dfbccef8906c39b26a4870082eabbc4c",
+    "description": "EIP-3009 gasless relayer — submits transferWithAuthorization on behalf of users"
+  },
+  "feeBps": 30,
+  "feePercent": "0.30%",
+  "feeCollector": "0xdb5019b8dfbccef8906c39b16a4870082eabbc4c"
+}

@@ -8,6 +8,8 @@ import {
   parseUSDC, truncateAddress, calcFee,
 } from "@/lib/wagmi";
 import { useUsdcPermit } from "@/lib/useUsdcPermit";
+import { useBasenameResolve } from "@/lib/useBasename";
+import { useUniswapEthPrice } from "@/lib/useUniswapEthPrice";
 import { WalletButton } from "@/components/Layout";
 import WalletName from "@/components/WalletName";
 import BlockaidNotice from "@/components/BlockaidNotice";
@@ -42,6 +44,19 @@ export default function SendPage() {
   const feePercent   = (feeBps / 100).toFixed(2);
 
   const { signPermit } = useUsdcPermit(address);
+
+  // ── Basenames forward resolution ────────────────────────────────────────────
+  const {
+    isName: toIsBasename,
+    data:   toResolved,
+    isFetching: isResolvingName,
+  } = useBasenameResolve(to);
+
+  // The address actually used for the transaction
+  const effectiveTo: string = (toIsBasename && toResolved) ? toResolved : to;
+
+  // ── Uniswap price feed (ETH/USDC spot price, read-only) ─────────────────────
+  const { usdcPerEth, ethForUsdc, uniswapSwapUrl } = useUniswapEthPrice();
 
   // ── Write hooks ────────────────────────────────────────────────────────────
   const {
@@ -81,10 +96,10 @@ export default function SendPage() {
     setStep("done");
   }
 
-  const isValidAddress = isAddress(to);
+  const isValidAddress = isAddress(effectiveTo);
   const isValidAmount  = parseFloat(amount) > 0;
   const isBusy         = isSigning || isFeePending || isFeeConfirming || isMainPending || isMainConfirming;
-  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle";
+  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle" && !isResolvingName;
 
   async function handleSend() {
     if (!canSend) return;
@@ -103,7 +118,7 @@ export default function SendPage() {
           address: routerAddr as `0x${string}`,
           abi: ROUTER_ABI,
           functionName: "sendWithPermit",
-          args: [USDC_ADDRESS, to as `0x${string}`, parseUSDC(amount), memo, deadline, v, r, s],
+          args: [USDC_ADDRESS, effectiveTo as `0x${string}`, parseUSDC(amount), memo, deadline, v, r, s],
         });
       } catch (err: unknown) {
         setIsSigning(false);
@@ -132,7 +147,7 @@ export default function SendPage() {
         address: USDC_ADDRESS,
         abi: USDC_ABI,
         functionName: "transfer",
-        args: [to as `0x${string}`, parseUSDC(amount)],
+        args: [effectiveTo as `0x${string}`, parseUSDC(amount)],
       });
     }
   }
@@ -269,14 +284,33 @@ export default function SendPage() {
           )}
           <input
             type="text"
-            placeholder="0x... wallet address"
+            placeholder="0x... address or name.base.eth"
             value={to}
             onChange={(e) => setTo(e.target.value)}
             className={`w-full px-3.5 py-2.5 rounded-lg border bg-secondary text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 transition-all ${
-              to && !isValidAddress ? "border-destructive/60 focus:ring-destructive/40" : "border-border focus:ring-primary/40 focus:border-primary/40"
+              to && !isValidAddress && !isResolvingName ? "border-destructive/60 focus:ring-destructive/40" : "border-border focus:ring-primary/40 focus:border-primary/40"
             }`}
           />
-          {to && !isValidAddress && <p className="text-xs text-destructive mt-1">Invalid wallet address</p>}
+          {/* Basename resolution status */}
+          {toIsBasename && isResolvingName && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <span className="inline-block w-3 h-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              Resolving Basename…
+            </p>
+          )}
+          {toIsBasename && !isResolvingName && toResolved && (
+            <p className="text-xs text-green-400 mt-1 font-mono flex items-center gap-1">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              {truncateAddress(toResolved)}
+              <span className="text-muted-foreground font-sans">via Basenames</span>
+            </p>
+          )}
+          {toIsBasename && !isResolvingName && !toResolved && (
+            <p className="text-xs text-destructive mt-1">Basename not found on Base</p>
+          )}
+          {to && !toIsBasename && !isValidAddress && (
+            <p className="text-xs text-destructive mt-1">Invalid address or Basename</p>
+          )}
         </div>
 
         {/* Amount */}
@@ -324,6 +358,25 @@ export default function SendPage() {
                 2 wallet confirmations required (fee + payment)
               </p>
             )}
+          </div>
+        )}
+
+        {/* Uniswap price hint */}
+        {isValidAmount && usdcPerEth && (
+          <div className="flex items-center justify-between text-xs text-muted-foreground px-0.5">
+            <span>
+              ≈ <span className="text-foreground font-medium">{ethForUsdc(parseFloat(amount))?.toFixed(5)}</span> ETH needed
+              <span className="ml-1 text-muted-foreground/60">@ ${usdcPerEth.toLocaleString()} USDC/ETH</span>
+            </span>
+            <a
+              href={uniswapSwapUrl(amount)}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 text-primary hover:underline"
+            >
+              Swap on Uniswap
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+            </a>
           </div>
         )}
 

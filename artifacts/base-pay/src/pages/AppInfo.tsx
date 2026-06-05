@@ -197,6 +197,84 @@ export default function AppInfoPage() {
         )}
       </div>
 
+      {/* Base Ecosystem Integrations */}
+      <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+        <div>
+          <p className="text-sm font-semibold">Base Ecosystem</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Protocols that complement BasePay on Base Mainnet</p>
+        </div>
+
+        <div className="grid gap-3">
+          {[
+            {
+              name: "Uniswap v3",
+              tag: "DEX · Swaps",
+              tagColor: "text-pink-400 bg-pink-500/10 border-pink-500/20",
+              desc: "Swap any token to USDC before sending. BasePay reads live ETH/USDC prices from the Uniswap V3 pool on Base.",
+              url: `https://app.uniswap.org/swap?inputCurrency=ETH&outputCurrency=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913&chain=base`,
+              contract: "0x2626664c2603336E57B271c5C0b26F421741e481",
+              contractLabel: "SwapRouter02",
+            },
+            {
+              name: "Aerodrome Finance",
+              tag: "DEX · Base Native",
+              tagColor: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+              desc: "Base's largest DEX by volume. ve(3,3) model with deep USDC liquidity — an alternative swap source for acquiring USDC.",
+              url: "https://aerodrome.finance/swap?from=eth&to=0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+              contract: "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43",
+              contractLabel: "Router",
+            },
+            {
+              name: "Basenames",
+              tag: "Identity · ENS",
+              tagColor: "text-blue-300 bg-blue-400/10 border-blue-400/20",
+              desc: "Human-readable .base.eth names. BasePay resolves them live in all address fields — type name.base.eth anywhere.",
+              url: "https://www.base.org/names",
+              contract: "0xC6d566A56A1aFf6508b41f6c90ff131615583BCD",
+              contractLabel: "L2Resolver",
+            },
+            {
+              name: "0xSplits",
+              tag: "Revenue Splits",
+              tagColor: "text-green-400 bg-green-500/10 border-green-500/20",
+              desc: "Split USDC payments between multiple addresses on-chain. Combine with BasePay's BatchPay for automated team payroll.",
+              url: "https://app.splits.org",
+              contract: "0x2ed6c4B5dA6378c7897AC67Ba9e43102Feb694EE",
+              contractLabel: "SplitMain",
+            },
+            {
+              name: "Superfluid",
+              tag: "Streaming Payments",
+              tagColor: "text-orange-400 bg-orange-500/10 border-orange-500/20",
+              desc: "Real-time per-second token streams. Complementary to BasePay subscriptions — use Superfluid for continuous flows, BasePay for interval-based billing.",
+              url: "https://app.superfluid.finance",
+              contract: "0x19ba78B9cDB05A877718841c574325fdB53601bb",
+              contractLabel: "CFAv1 Forwarder",
+            },
+          ].map((p) => (
+            <a
+              key={p.name}
+              href={p.url}
+              target="_blank"
+              rel="noreferrer"
+              className="group flex flex-col gap-2 rounded-xl border border-border bg-secondary/50 hover:border-primary/30 hover:bg-secondary transition-all p-3.5"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">{p.name}</span>
+                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${p.tagColor}`}>{p.tag}</span>
+                </div>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-muted-foreground/40 group-hover:text-primary transition-colors flex-shrink-0">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/>
+                </svg>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">{p.desc}</p>
+              <p className="text-[10px] font-mono text-muted-foreground/50 truncate">{p.contractLabel}: {p.contract}</p>
+            </a>
+          ))}
+        </div>
+      </div>
+
       {/* Contract deploy note */}
       {!config.routerAddress && (
         <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-5">

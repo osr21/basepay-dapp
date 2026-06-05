@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams } from "wouter";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { useGetPaymentRequest, useUpdatePaymentRequest } from "@workspace/api-client-react";
@@ -7,6 +8,7 @@ import { WalletButton } from "@/components/Layout";
 export default function PayPage() {
   const { id } = useParams<{ id: string }>();
   const { address, isConnected } = useAccount();
+  const [statusUpdateError, setStatusUpdateError] = useState<string | undefined>();
 
   const { data: req, isLoading, error } = useGetPaymentRequest(id, {
     query: { enabled: !!id, queryKey: ["getPaymentRequest", id] },
@@ -28,7 +30,16 @@ export default function PayPage() {
       },
       {
         onSuccess: (hash) => {
-          updateRequest({ id: req.id, data: { status: "paid", paidTxHash: hash } });
+          updateRequest(
+            { id: req.id, data: { status: "paid", paidTxHash: hash } },
+            {
+              onError: () => {
+                setStatusUpdateError(
+                  `Payment confirmed on-chain (${hash.slice(0, 10)}…) but the request status could not be updated. The payment went through — check BaseScan to verify.`
+                );
+              },
+            }
+          );
         },
       }
     );
@@ -57,7 +68,7 @@ export default function PayPage() {
 
   if (isSuccess && txHash) {
     return (
-      <div className="max-w-md mx-auto">
+      <div className="max-w-md mx-auto space-y-3">
         <div className="rounded-2xl border border-green-500/20 bg-green-500/5 p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center mx-auto mb-4">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgb(74 222 128)" strokeWidth="2.5">
@@ -76,6 +87,11 @@ export default function PayPage() {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
           </a>
         </div>
+        {statusUpdateError && (
+          <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 text-xs text-yellow-400">
+            {statusUpdateError}
+          </div>
+        )}
       </div>
     );
   }

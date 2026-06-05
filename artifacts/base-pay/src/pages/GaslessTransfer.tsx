@@ -38,6 +38,11 @@ export default function GaslessTransferPage() {
     if (!canSend || !address) return;
     setError(undefined);
 
+    if (to.toLowerCase() === address.toLowerCase()) {
+      setError("Recipient cannot be your own address.");
+      return;
+    }
+
     try {
       // 1. Sign off-chain — no gas, no wallet popup with "transaction"
       setStep("signing");
@@ -68,7 +73,7 @@ export default function GaslessTransferPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (!msg.toLowerCase().includes("rejected") && !msg.toLowerCase().includes("denied")) {
-        setError(msg.slice(0, 160));
+        setError(msg.slice(0, 400));
       }
       setStep("idle");
     }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { isAddress, decodeEventLog, maxUint256 } from "viem";
+import { isAddress, decodeEventLog } from "viem";
 import {
   USDC_ADDRESS, SUBSCRIPTION_MANAGER_ABI, FEE_BPS,
   parseUSDC, formatUSDC, truncateAddress,
@@ -17,8 +17,14 @@ const INTERVALS = [
   { label: "Monthly", seconds: 2_592_000n, display: "month" },
 ];
 
-// Far-future deadline for subscription permits — 2100-01-01 UTC
-const SUB_PERMIT_DEADLINE = 4_102_444_800n;
+// Subscription permit deadline: 3 years from contract creation.
+// Deliberately NOT maxUint256 / year-2100 — that gives the contract
+// unlimited allowance forever, which is a serious attack surface.
+// After ~3 years the user must re-subscribe, which also forces a
+// review of the subscription terms.
+function subPermitDeadline(): bigint {
+  return BigInt(Math.floor(Date.now() / 1000) + 3 * 365 * 24 * 3600);
+}
 
 export default function SubscriptionsPage() {
   const { address, isConnected } = useAccount();
@@ -65,13 +71,17 @@ export default function SubscriptionsPage() {
     setIsSigning(true);
     setSignError(undefined);
     try {
-      // Use max uint256 as permit amount so all future charges work without re-approval.
-      // Deadline set to year 2100 so the permit never needs to be renewed.
-      // The user explicitly signs this — their wallet shows exactly what they're allowing.
+      // Permit amount: 1,000× the per-charge amount (covers thousands of billing cycles
+      // without granting unlimited access). Deadline: 3 years from now.
+      // Using maxUint256 + year-2100 would give the contract permanent unlimited
+      // allowance — a critical exploit surface if the contract is ever compromised.
+      const deadline = subPermitDeadline();
+      const permitAmount = amountRaw * 1_000n;
+      const deadlineSecs = Number(deadline - BigInt(Math.floor(Date.now() / 1000)));
       const { v, r, s } = await signPermit(
         SUB_MANAGER_ADDRESS,
-        maxUint256,
-        Number(SUB_PERMIT_DEADLINE - BigInt(Math.floor(Date.now() / 1000))),
+        permitAmount,
+        deadlineSecs,
       );
       setIsSigning(false);
       setStep("subscribing");
@@ -85,8 +95,8 @@ export default function SubscriptionsPage() {
           amountRaw,
           interval.seconds,
           memo,
-          maxUint256,
-          SUB_PERMIT_DEADLINE,
+          permitAmount,
+          deadline,
           v, r, s,
         ],
       });

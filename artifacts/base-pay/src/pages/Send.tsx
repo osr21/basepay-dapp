@@ -314,7 +314,12 @@ export default function SendPage() {
               <span>Recipient gets</span>
               <span>{net} USDC</span>
             </div>
-            {!useRouter && (
+            {!useRouter && fee !== "0.00" && (
+              <p className="text-[10px] text-yellow-500/70 pt-0.5">
+                ⚠ 2 confirmations required. If you reject the second, the fee is non-refundable. Enable the Router above for one atomic transaction.
+              </p>
+            )}
+            {!useRouter && fee === "0.00" && (
               <p className="text-[10px] text-muted-foreground/60 pt-0.5">
                 2 wallet confirmations required (fee + payment)
               </p>

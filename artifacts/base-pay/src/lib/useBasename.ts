@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createPublicClient, http, type Address } from "viem";
+import { namehash, normalize } from "viem/ens";
 import { base } from "viem/chains";
 
 // Basenames L2 Reverse Registrar on Base Mainnet
@@ -95,4 +96,45 @@ export function useBasename(address: string | undefined) {
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
+}
+
+// ── Forward resolution: .base.eth name → address ─────────────────────────────
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+async function resolveBasenameToAddress(name: string): Promise<`0x${string}` | null> {
+  try {
+    const normalized = normalize(name.trim().toLowerCase());
+    const node = namehash(normalized);
+    const addr = await publicClient.readContract({
+      address: L2_RESOLVER,
+      abi: RESOLVER_ABI,
+      functionName: "addr",
+      args: [node],
+    });
+    if (!addr || addr.toLowerCase() === ZERO_ADDRESS) return null;
+    return addr;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves a Basename (e.g. "alice.base.eth") to its wallet address.
+ * Returns null if not a basename input or not found.
+ */
+export function useBasenameResolve(input: string) {
+  const trimmed = input.trim().toLowerCase();
+  const isName  = trimmed.endsWith(".base.eth") && trimmed.length > ".base.eth".length;
+
+  const query = useQuery({
+    queryKey: ["basenameResolve", trimmed],
+    queryFn: () => resolveBasenameToAddress(trimmed),
+    enabled: isName,
+    staleTime: 2 * 60 * 1000,
+    gcTime:   5 * 60 * 1000,
+    retry: 1,
+  });
+
+  return { ...query, isName };
 }

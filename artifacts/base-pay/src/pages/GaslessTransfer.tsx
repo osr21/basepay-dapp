@@ -5,6 +5,7 @@ import { useGetGaslessFee, useSubmitGaslessTransfer } from "@workspace/api-clien
 import { useListContacts } from "@workspace/api-client-react";
 import { parseUSDC, truncateAddress } from "@/lib/wagmi";
 import { useUsdcAuthorization } from "@/lib/useUsdcAuthorization";
+import { useBasenameResolve } from "@/lib/useBasename";
 import { WalletButton } from "@/components/Layout";
 import WalletName from "@/components/WalletName";
 
@@ -29,7 +30,16 @@ export default function GaslessTransferPage() {
   const { signAuthorization }           = useUsdcAuthorization(address as `0x${string}` | undefined);
   const { mutateAsync: relayTransfer }  = useSubmitGaslessTransfer();
 
-  const isValidAddress = isAddress(to);
+  // ── Basenames forward resolution ────────────────────────────────────────────
+  const {
+    isName: toIsBasename,
+    data:   toResolved,
+    isFetching: isResolvingName,
+  } = useBasenameResolve(to);
+
+  const effectiveTo: string = (toIsBasename && toResolved) ? toResolved : to;
+
+  const isValidAddress = isAddress(effectiveTo);
   const isValidAmount  = parseFloat(amount) > 0;
   const isBusy         = step === "signing" || step === "relaying";
   const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle";
@@ -38,7 +48,7 @@ export default function GaslessTransferPage() {
     if (!canSend || !address) return;
     setError(undefined);
 
-    if (to.toLowerCase() === address.toLowerCase()) {
+    if (effectiveTo.toLowerCase() === address.toLowerCase()) {
       setError("Recipient cannot be your own address.");
       return;
     }
@@ -48,7 +58,7 @@ export default function GaslessTransferPage() {
       setStep("signing");
       const value = parseUSDC(amount);
       const { v, r, s, nonce, validAfter, validBefore } = await signAuthorization(
-        to as `0x${string}`,
+        effectiveTo as `0x${string}`,
         value,
       );
 
@@ -57,7 +67,7 @@ export default function GaslessTransferPage() {
       const result = await relayTransfer({
         data: {
           from:        address,
-          to,
+          to:          effectiveTo,
           value:       value.toString(),
           validAfter:  validAfter.toString(),
           validBefore: validBefore.toString(),
@@ -252,16 +262,34 @@ export default function GaslessTransferPage() {
           )}
           <input
             type="text"
-            placeholder="0x... wallet address"
+            placeholder="0x... address or name.base.eth"
             value={to}
             onChange={(e) => setTo(e.target.value)}
             className={`w-full px-3.5 py-2.5 rounded-lg border bg-secondary text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 transition-all ${
-              to && !isValidAddress
+              to && !isValidAddress && !isResolvingName
                 ? "border-destructive/60 focus:ring-destructive/40"
                 : "border-border focus:ring-primary/40 focus:border-primary/40"
             }`}
           />
-          {to && !isValidAddress && <p className="text-xs text-destructive mt-1">Invalid wallet address</p>}
+          {toIsBasename && isResolvingName && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <span className="inline-block w-3 h-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              Resolving Basename…
+            </p>
+          )}
+          {toIsBasename && !isResolvingName && toResolved && (
+            <p className="text-xs text-green-400 mt-1 font-mono flex items-center gap-1">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              {truncateAddress(toResolved)}
+              <span className="text-muted-foreground font-sans">via Basenames</span>
+            </p>
+          )}
+          {toIsBasename && !isResolvingName && !toResolved && (
+            <p className="text-xs text-destructive mt-1">Basename not found on Base</p>
+          )}
+          {to && !toIsBasename && !isValidAddress && (
+            <p className="text-xs text-destructive mt-1">Invalid address or Basename</p>
+          )}
         </div>
 
         {/* Amount */}

@@ -1,6 +1,14 @@
 import { createConfig, http } from "wagmi";
 import { base } from "viem/chains";
 import { injected } from "wagmi/connectors";
+import { Attribution } from "ox/erc8021";
+
+// ── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
+// Register at base.dev → Settings → Builder Code, then set VITE_BASE_BUILDER_CODE
+const _builderCode = import.meta.env.VITE_BASE_BUILDER_CODE as string | undefined;
+export const DATA_SUFFIX = _builderCode
+  ? Attribution.toDataSuffix({ codes: [_builderCode] })
+  : undefined;
 
 export const config = createConfig({
   chains: [base],
@@ -8,6 +16,7 @@ export const config = createConfig({
   transports: {
     [base.id]: http(),
   },
+  ...(DATA_SUFFIX ? { dataSuffix: DATA_SUFFIX } : {}),
 });
 
 // ── USDC on Base ────────────────────────────────────────────────────────────

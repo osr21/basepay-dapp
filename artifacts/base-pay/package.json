@@ -75,6 +75,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "ox": "^0.14.29",
     "qrcode.react": "^4.2.0",
     "viem": "^2.52.0",
     "wagmi": "^3.6.16"

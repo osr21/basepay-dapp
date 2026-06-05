@@ -11,9 +11,17 @@ import {
 } from "viem";
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
+import { Attribution } from "ox/erc8021";
 import { db, gaslessNoncesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+
+// ── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
+// Register at base.dev → Settings → Builder Code, then set BASE_BUILDER_CODE
+const _builderCode = process.env.BASE_BUILDER_CODE;
+const DATA_SUFFIX: Hex | undefined = _builderCode
+  ? (Attribution.toDataSuffix({ codes: [_builderCode] }) as Hex)
+  : undefined;
 
 const router = Router();
 
@@ -33,7 +41,12 @@ function getRelayer(): Relayer {
   if (!pk) throw new Error("DEPLOYER_PRIVATE_KEY not set");
   const key = pk.startsWith("0x") ? (pk as Hex) : (`0x${pk}` as Hex);
   const account = privateKeyToAccount(key);
-  const client  = createWalletClient({ account, chain: base, transport });
+  const client  = createWalletClient({
+    account,
+    chain: base,
+    transport,
+    ...(DATA_SUFFIX ? { dataSuffix: DATA_SUFFIX } : {}),
+  });
   _relayer = { client, account };
   return _relayer;
 }

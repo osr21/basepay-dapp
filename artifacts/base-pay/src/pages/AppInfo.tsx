@@ -1,5 +1,5 @@
 import { useGetAppConfig } from "@workspace/api-client-react";
-import { truncateAddress } from "@/lib/wagmi";
+import { truncateAddress, DATA_SUFFIX } from "@/lib/wagmi";
 
 function Row({ label, value, mono = false, children }: { label: string; value?: string | number | boolean | null; mono?: boolean; children?: React.ReactNode }) {
   return (
@@ -137,6 +137,64 @@ export default function AppInfoPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Base Builder Code card */}
+      <div className={`rounded-2xl border p-5 ${
+        DATA_SUFFIX
+          ? "border-blue-500/20 bg-blue-500/5"
+          : "border-yellow-500/20 bg-yellow-500/5"
+      }`}>
+        <div className="flex items-center gap-2 mb-3">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            className={DATA_SUFFIX ? "text-blue-400" : "text-yellow-400"}>
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+          <p className={`text-sm font-semibold ${DATA_SUFFIX ? "text-blue-400" : "text-yellow-400"}`}>
+            Base Builder Code
+          </p>
+          <span className={`ml-auto text-xs px-2 py-0.5 rounded-full font-medium border ${
+            DATA_SUFFIX
+              ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+              : "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+          }`}>
+            {DATA_SUFFIX ? "Active" : "Not configured"}
+          </span>
+        </div>
+        {DATA_SUFFIX ? (
+          <>
+            <p className="text-xs text-muted-foreground mb-2">
+              ERC-8021 attribution suffix is appended to every transaction — user sends and relayed gasless transfers included.
+              BasePay activity is tracked in the Base ecosystem and eligible for rewards.
+            </p>
+            <p className="text-xs font-mono text-muted-foreground break-all">
+              Suffix: <span className="text-blue-400">{DATA_SUFFIX}</span>
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground mb-3">
+              Register on base.dev to get a Builder Code, then set{" "}
+              <code className="text-yellow-400 bg-yellow-500/10 px-1 rounded">VITE_BASE_BUILDER_CODE</code>{" "}
+              (frontend) and{" "}
+              <code className="text-yellow-400 bg-yellow-500/10 px-1 rounded">BASE_BUILDER_CODE</code>{" "}
+              (server) to attribute all transactions to this dApp.
+            </p>
+            <a
+              href="https://base.dev"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-yellow-400 hover:underline"
+            >
+              Get your Builder Code at base.dev
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" x2="21" y1="14" y2="3"/>
+              </svg>
+            </a>
+          </>
+        )}
       </div>
 
       {/* Contract deploy note */}

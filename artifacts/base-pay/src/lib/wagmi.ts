@@ -1,22 +1,64 @@
-import { createConfig, http } from "wagmi";
+import { createConfig, http, createConnector } from "wagmi";
 import { base } from "viem/chains";
 import { injected } from "wagmi/connectors";
+import { concat, type Hex } from "viem";
 import { Attribution } from "ox/erc8021";
 
 // ── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
 // Register at base.dev → Settings → Builder Code, then set VITE_BASE_BUILDER_CODE
 const _builderCode = import.meta.env.VITE_BASE_BUILDER_CODE as string | undefined;
 export const DATA_SUFFIX = _builderCode
-  ? Attribution.toDataSuffix({ codes: [_builderCode] })
+  ? (Attribution.toDataSuffix({ codes: [_builderCode] }) as Hex)
   : undefined;
+
+// ── Custom connector: intercepts eth_sendTransaction to append ERC-8021 suffix ─
+// wagmi v3 does not forward dataSuffix at the config level; we proxy the
+// injected provider's request() so the suffix is appended to calldata before
+// MetaMask signs — covering every contract write automatically.
+function attributedInjected() {
+  const base_ = injected();
+  if (!DATA_SUFFIX) return base_;
+
+  return createConnector((config_) => {
+    const conn = (base_ as unknown as (cfg: typeof config_) => ReturnType<ReturnType<typeof createConnector>>)(config_);
+
+    return {
+      ...conn,
+      async getProvider(params?: { chainId?: number }) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const provider = await (conn as any).getProvider(params);
+        if (!provider) return provider;
+
+        return new Proxy(provider as object, {
+          get(target, prop) {
+            if (prop !== "request") {
+              const v = (target as Record<string | symbol, unknown>)[prop];
+              return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+            }
+            return async ({ method, params: rpcParams }: { method: string; params?: unknown[] }) => {
+              if (method === "eth_sendTransaction" && DATA_SUFFIX && Array.isArray(rpcParams) && rpcParams[0]) {
+                const tx = { ...(rpcParams[0] as Record<string, unknown>) };
+                const existing = ((tx["data"] as Hex | undefined) ?? "0x") as Hex;
+                tx["data"] = existing === "0x"
+                  ? DATA_SUFFIX
+                  : concat([existing, DATA_SUFFIX]);
+                return (target as { request(a: unknown): Promise<unknown> }).request({ method, params: [tx] });
+              }
+              return (target as { request(a: unknown): Promise<unknown> }).request({ method, params: rpcParams });
+            };
+          },
+        });
+      },
+    };
+  });
+}
 
 export const config = createConfig({
   chains: [base],
-  connectors: [injected()],
+  connectors: [attributedInjected()],
   transports: {
     [base.id]: http(),
   },
-  ...(DATA_SUFFIX ? { dataSuffix: DATA_SUFFIX } : {}),
 });
 
 // ── USDC on Base ────────────────────────────────────────────────────────────

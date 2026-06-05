@@ -7,6 +7,7 @@ import {
 } from "@/lib/wagmi";
 import { useUsdcPermit } from "@/lib/useUsdcPermit";
 import { WalletButton } from "@/components/Layout";
+import WalletName from "@/components/WalletName";
 
 const BATCH_PAY_ADDRESS = (import.meta.env.VITE_BATCH_PAY_ADDRESS ?? "") as `0x${string}`;
 
@@ -235,7 +236,7 @@ export default function BatchPayPage() {
           <div className="space-y-1 text-sm">
             {validRows.map((r, i) => (
               <div key={i} className="flex justify-between text-muted-foreground">
-                <span className="font-mono">{truncateAddress(r.address)}</span>
+                <WalletName address={r.address} />
                 <span>{(parseFloat(r.amount) * (1 - FEE_BPS / 10_000)).toFixed(4)} USDC</span>
               </div>
             ))}

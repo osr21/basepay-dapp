@@ -9,6 +9,7 @@ import {
 } from "@/lib/wagmi";
 import { useUsdcPermit } from "@/lib/useUsdcPermit";
 import { WalletButton } from "@/components/Layout";
+import WalletName from "@/components/WalletName";
 
 type SendStep = "idle" | "signing" | "fee" | "payment" | "done";
 
@@ -183,7 +184,7 @@ export default function SendPage() {
           </div>
           <h2 className="text-xl font-bold mb-1">Payment Sent</h2>
           <p className="text-muted-foreground text-sm mb-1">{net} USDC to</p>
-          <p className="font-mono text-sm mb-4">{truncateAddress(to)}</p>
+          <WalletName address={to} showAvatar={true} avatarSize={20} className="text-sm mb-4 justify-center" />
 
           <div className="text-xs text-muted-foreground bg-secondary rounded-lg px-3 py-2 mb-4 space-y-1 text-left">
             <div className="flex justify-between">
@@ -260,7 +261,7 @@ export default function SendPage() {
                   onClick={() => { setTo(c.walletAddress); setShowContacts(false); }}
                 >
                   <span className="text-sm font-medium">{c.name}</span>
-                  <span className="text-xs text-muted-foreground font-mono">{truncateAddress(c.walletAddress)}</span>
+                  <WalletName address={c.walletAddress} className="text-xs text-muted-foreground" />
                 </button>
               ))}
             </div>

@@ -6,6 +6,7 @@ import { useListContacts } from "@workspace/api-client-react";
 import { parseUSDC, truncateAddress } from "@/lib/wagmi";
 import { useUsdcAuthorization } from "@/lib/useUsdcAuthorization";
 import { WalletButton } from "@/components/Layout";
+import WalletName from "@/components/WalletName";
 
 type Step = "idle" | "signing" | "relaying" | "done";
 
@@ -141,7 +142,7 @@ export default function GaslessTransferPage() {
           </div>
           <h2 className="text-xl font-bold mb-1">Transfer Sent</h2>
           <p className="text-muted-foreground text-sm mb-1">{humanVal} USDC to</p>
-          <p className="font-mono text-sm mb-2">{truncateAddress(to)}</p>
+          <WalletName address={to} showAvatar={true} avatarSize={20} className="text-sm mb-2 justify-center" />
 
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-xs text-green-400 font-medium mb-4">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -239,7 +240,7 @@ export default function GaslessTransferPage() {
                   onClick={() => { setTo(c.walletAddress); setShowContacts(false); }}
                 >
                   <span className="text-sm font-medium">{c.name}</span>
-                  <span className="text-xs text-muted-foreground font-mono">{truncateAddress(c.walletAddress)}</span>
+                  <WalletName address={c.walletAddress} className="text-xs text-muted-foreground" />
                 </button>
               ))}
             </div>

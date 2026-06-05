@@ -5,6 +5,7 @@ import { useListContacts, useCreateContact, useDeleteContact, getListContactsQue
 import { useQueryClient } from "@tanstack/react-query";
 import { truncateAddress } from "@/lib/wagmi";
 import { WalletButton } from "@/components/Layout";
+import WalletName, { WalletAvatar } from "@/components/WalletName";
 import { Link } from "wouter";
 
 export default function ContactsPage() {
@@ -147,12 +148,12 @@ export default function ContactsPage() {
           <div className="divide-y divide-border">
             {contacts.map((c) => (
               <div key={c.id} className="px-5 py-4 flex items-center gap-4 hover:bg-secondary/20 transition-colors">
-                <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center shrink-0">
-                  <span className="text-xs font-bold text-primary">{c.name[0]?.toUpperCase()}</span>
+                <div className="w-9 h-9 shrink-0">
+                  <WalletAvatar address={c.walletAddress} size={36} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold">{c.name}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{truncateAddress(c.walletAddress)}</p>
+                  <WalletName address={c.walletAddress} className="text-xs text-muted-foreground" />
                   {c.ensName && <p className="text-xs text-primary">{c.ensName}</p>}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

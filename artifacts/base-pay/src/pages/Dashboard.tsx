@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { useGetStats, getGetStatsQueryKey } from "@workspace/api-client-react";
 import { USDC_ADDRESS, USDC_ABI, USDC_DECIMALS, formatUSDC, truncateAddress } from "@/lib/wagmi";
 import { WalletButton } from "@/components/Layout";
+import WalletName, { WalletAvatar } from "@/components/WalletName";
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -75,7 +76,9 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground font-mono">{address ? truncateAddress(address) : ""}</p>
+          {address && (
+            <WalletName address={address} showAvatar={true} avatarSize={18} className="text-sm text-muted-foreground" />
+          )}
         </div>
       </div>
 

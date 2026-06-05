@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } from "wagmi";
 import { injected } from "wagmi/connectors";
+import { base } from "viem/chains";
 import { useGetAppConfig } from "@workspace/api-client-react";
 import { truncateAddress } from "@/lib/wagmi";
 
@@ -46,6 +47,33 @@ function LockIcon() {
 }
 function RepeatIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>;
+}
+
+function WrongNetworkBanner() {
+  const { isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChain, isPending } = useSwitchChain();
+
+  if (!isConnected || chainId === base.id) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 md:px-8 py-2.5 bg-red-500/10 border-b border-red-500/20 text-sm">
+      <div className="flex items-center gap-2 text-red-400">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>
+        </svg>
+        <span>Wrong network — BasePay requires <span className="font-semibold">Base Mainnet</span></span>
+      </div>
+      <button
+        onClick={() => switchChain({ chainId: base.id })}
+        disabled={isPending}
+        className="shrink-0 px-3 py-1 rounded-md bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-semibold hover:bg-red-500/30 transition-all disabled:opacity-50"
+      >
+        {isPending ? "Switching…" : "Switch to Base"}
+      </button>
+    </div>
+  );
 }
 
 export function WalletButton() {
@@ -181,6 +209,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <WalletButton />
           </div>
         </header>
+
+        {/* Wrong-network banner */}
+        <WrongNetworkBanner />
 
         {/* Page */}
         <main className="flex-1 px-4 md:px-8 py-6">

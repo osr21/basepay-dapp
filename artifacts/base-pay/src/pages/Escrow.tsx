@@ -7,6 +7,7 @@ import {
 } from "@/lib/wagmi";
 import { useUsdcPermit } from "@/lib/useUsdcPermit";
 import { WalletButton } from "@/components/Layout";
+import BlockaidNotice from "@/components/BlockaidNotice";
 
 const ESCROW_ADDRESS = (import.meta.env.VITE_ESCROW_ADDRESS ?? "") as `0x${string}`;
 
@@ -249,6 +250,13 @@ export default function EscrowPage() {
           </div>
           <div className="flex justify-between text-muted-foreground"><span>Refund if unclaimed after</span><span>{DURATIONS[ttlIdx].label}</span></div>
         </div>
+      )}
+
+      {ESCROW_ADDRESS && (
+        <BlockaidNotice
+          contractAddress={ESCROW_ADDRESS}
+          contractName="EscrowV2"
+        />
       )}
 
       <button

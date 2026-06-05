@@ -8,6 +8,7 @@ import {
 import { useUsdcPermit } from "@/lib/useUsdcPermit";
 import { WalletButton } from "@/components/Layout";
 import WalletName from "@/components/WalletName";
+import BlockaidNotice from "@/components/BlockaidNotice";
 
 const BATCH_PAY_ADDRESS = (import.meta.env.VITE_BATCH_PAY_ADDRESS ?? "") as `0x${string}`;
 
@@ -253,6 +254,13 @@ export default function BatchPayPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {BATCH_PAY_ADDRESS && (
+        <BlockaidNotice
+          contractAddress={BATCH_PAY_ADDRESS}
+          contractName="BatchPayV2"
+        />
       )}
 
       <button

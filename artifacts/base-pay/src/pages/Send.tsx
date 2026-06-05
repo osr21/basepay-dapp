@@ -10,6 +10,7 @@ import {
 import { useUsdcPermit } from "@/lib/useUsdcPermit";
 import { WalletButton } from "@/components/Layout";
 import WalletName from "@/components/WalletName";
+import BlockaidNotice from "@/components/BlockaidNotice";
 
 type SendStep = "idle" | "signing" | "fee" | "payment" | "done";
 
@@ -164,7 +165,7 @@ export default function SendPage() {
           </div>
           <h2 className="text-lg font-bold">Sign message in wallet</h2>
           <p className="text-sm text-muted-foreground">
-            This is an off-chain signature — <span className="text-green-400 font-medium">not a transaction</span>. No gas, no approval, no security warnings.
+            This is an off-chain signature — <span className="text-green-400 font-medium">not a transaction</span>. No gas, no approval step. MetaMask may show a Blockaid alert — click <span className="text-yellow-300 font-medium">"Proceed anyway"</span> to continue.
           </p>
           <p className="text-xs text-muted-foreground font-mono">Waiting for signature...</p>
         </div>
@@ -351,7 +352,7 @@ export default function SendPage() {
               {routerEnabled && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-foreground">⚡ Single-transaction via Router <span className="text-green-400 font-normal text-[10px]">✓ no wallet warnings</span></p>
+              <p className="text-xs font-semibold text-foreground">⚡ Single-transaction via Router <span className="text-blue-400 font-normal text-[10px]">verified on Basescan</span></p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
                 {routerEnabled
                   ? "Sign a message (off-chain, no gas) → confirm 1 transaction. Fee + payment in one atomic tx. No approval step."
@@ -359,6 +360,14 @@ export default function SendPage() {
               </p>
             </div>
           </div>
+        )}
+
+        {/* Blockaid notice — only shown for the permit (router) path */}
+        {useRouter && (
+          <BlockaidNotice
+            contractAddress={routerAddr}
+            contractName="BasePayRouterV2"
+          />
         )}
 
         {/* CTA */}

@@ -7,6 +7,7 @@ import {
 } from "@/lib/wagmi";
 import { useUsdcPermit } from "@/lib/useUsdcPermit";
 import { WalletButton } from "@/components/Layout";
+import BlockaidNotice from "@/components/BlockaidNotice";
 
 const SUB_MANAGER_ADDRESS = (import.meta.env.VITE_SUBSCRIPTION_MANAGER_ADDRESS ?? "") as `0x${string}`;
 
@@ -277,6 +278,13 @@ export default function SubscriptionsPage() {
         <p><span className="font-semibold text-foreground">How it works:</span> Sign one message in your wallet (no gas, no transaction) to authorise recurring charges. The payee triggers each charge once per {interval.display}.</p>
         <p>Keep your USDC balance funded. Cancel anytime.</p>
       </div>
+
+      {SUB_MANAGER_ADDRESS && (
+        <BlockaidNotice
+          contractAddress={SUB_MANAGER_ADDRESS}
+          contractName="SubscriptionManagerV2"
+        />
+      )}
 
       <button
         onClick={handleSubscribe}

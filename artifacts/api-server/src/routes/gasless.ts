@@ -4,6 +4,8 @@ import {
   createPublicClient,
   http,
   parseAbi,
+  encodeFunctionData,
+  concat,
   isAddress,
   isHex,
   type Hex,
@@ -195,13 +197,12 @@ router.post("/gasless/transfer", async (req, res) => {
     }
 
     // 9. Submit transferWithAuthorization
+    // Build calldata manually so the ERC-8021 builder code suffix is always
+    // appended — bypasses viem's internal dataSuffix plumbing entirely.
     let txHash: Hex;
     try {
-      txHash = await relayer.client.writeContract({
-        chain:   base,
-        account: relayer.account,
-        address: USDC_ADDRESS,
-        abi:     USDC_ABI,
+      const calldata = encodeFunctionData({
+        abi:          USDC_ABI,
         functionName: "transferWithAuthorization",
         args: [
           from        as `0x${string}`,
@@ -214,6 +215,14 @@ router.post("/gasless/transfer", async (req, res) => {
           r           as `0x${string}`,
           s           as `0x${string}`,
         ],
+      });
+      const data: Hex = DATA_SUFFIX ? concat([calldata, DATA_SUFFIX]) : calldata;
+
+      txHash = await relayer.client.sendTransaction({
+        chain:   base,
+        account: relayer.account,
+        to:      USDC_ADDRESS,
+        data,
       });
     } catch (err: unknown) {
       // Extract a clean revert reason from viem's verbose error format

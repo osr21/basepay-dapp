@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useAccount, usePublicClient } from "wagmi";
+import { useAccount, usePublicClient, useReadContract } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
-import { isAddress, parseUnits } from "viem";
+import { isAddress, parseUnits, formatUnits } from "viem";
 import { useGetGaslessFee, useSubmitGaslessTransfer } from "@workspace/api-client-react";
 import { useListContacts } from "@workspace/api-client-react";
 import { GASLESS_TOKENS, truncateAddress, type GaslessToken } from "@/lib/wagmi";
@@ -44,6 +44,17 @@ export default function GaslessTransferPage() {
     { ownerAddress: address },
     { query: { enabled: !!address, queryKey: ["listContacts", address] } },
   );
+
+  const { data: rawBalance, isLoading: isLoadingBalance } = useReadContract({
+    address:      selectedToken.address,
+    abi:          [{ type: "function", name: "balanceOf", inputs: [{ name: "account", type: "address" }], outputs: [{ name: "", type: "uint256" }], stateMutability: "view" }] as const,
+    functionName: "balanceOf",
+    args:         address ? [address] : undefined,
+    query:        { enabled: !!address, refetchInterval: 15_000 },
+  });
+  const tokenBalance = rawBalance !== undefined
+    ? { value: rawBalance as bigint, decimals: selectedToken.decimals }
+    : undefined;
 
   const { signAuthorization }          = useUsdcAuthorization(address as `0x${string}` | undefined, selectedToken);
   const { mutateAsync: relayTransfer } = useSubmitGaslessTransfer();
@@ -281,7 +292,29 @@ export default function GaslessTransferPage() {
       <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
         {/* Token selector */}
         <div>
-          <label className="text-sm font-medium block mb-2">Token</label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium">Token</label>
+            {/* Balance indicator */}
+            <span className="text-xs text-muted-foreground">
+              {isLoadingBalance && !!address ? (
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full border border-primary border-t-transparent animate-spin" />
+                  Loading…
+                </span>
+              ) : tokenBalance ? (
+                <span className="font-mono tabular-nums">
+                  Balance:{" "}
+                  <span className="text-foreground font-semibold">
+                    {parseFloat(formatUnits(tokenBalance.value, tokenBalance.decimals)).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>{" "}
+                  {selectedToken.symbol}
+                </span>
+              ) : null}
+            </span>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             {GASLESS_TOKENS.map((token) => (
               <button
@@ -372,11 +405,22 @@ export default function GaslessTransferPage() {
               min="0"
               step="0.01"
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full px-3.5 py-2.5 pr-20 rounded-lg border border-border bg-secondary text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-all"
+              className="w-full px-3.5 py-2.5 pr-28 rounded-lg border border-border bg-secondary text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-all"
             />
-            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">
-              {selectedToken.flag} {selectedToken.symbol}
-            </span>
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+              {tokenBalance && tokenBalance.value > 0n && (
+                <button
+                  type="button"
+                  onClick={() => setAmount(formatUnits(tokenBalance.value, tokenBalance.decimals))}
+                  className="text-[10px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-1.5 py-0.5 rounded transition-colors"
+                >
+                  MAX
+                </button>
+              )}
+              <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded whitespace-nowrap">
+                {selectedToken.flag} {selectedToken.symbol}
+              </span>
+            </div>
           </div>
         </div>
 

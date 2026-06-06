@@ -147,6 +147,46 @@ export const UpdatePaymentRequestResponse = zod.object({
 
 
 /**
+ * @summary Get a Uniswap V3 quote for a USDC↔EURC swap
+ */
+export const GetSwapQuoteQueryParams = zod.object({
+  "tokenIn": zod.coerce.string().describe('Input token address'),
+  "tokenOut": zod.coerce.string().describe('Output token address'),
+  "amountIn": zod.coerce.string().describe('Input amount in atomic units (6 decimals)')
+})
+
+export const GetSwapQuoteResponse = zod.object({
+  "amountOut": zod.string().describe('Expected output amount in atomic units'),
+  "amountOutMin": zod.string().describe('Minimum output amount after 1% slippage guard'),
+  "fee": zod.number().describe('Uniswap V3 pool fee tier (e.g. 500 = 0.05%)')
+})
+
+
+/**
+ * @summary Execute a gasless USDC↔EURC swap via EIP-2612 permit + Uniswap V3 relayer
+ */
+export const ExecuteGaslessSwapBody = zod.object({
+  "tokenIn": zod.string().describe('Input token contract address (USDC or EURC)'),
+  "tokenOut": zod.string().describe('Output token contract address (USDC or EURC)'),
+  "amountIn": zod.string().describe('Input amount in atomic units (6 decimals) as decimal string'),
+  "owner": zod.string().describe('Wallet address of the token owner (signer of the permit)'),
+  "deadline": zod.string().describe('Unix timestamp permit deadline'),
+  "permitV": zod.number().describe('Permit signature v component'),
+  "permitR": zod.string().describe('Permit signature r component (0x-prefixed 32-byte hex)'),
+  "permitS": zod.string().describe('Permit signature s component (0x-prefixed 32-byte hex)'),
+  "slippageBps": zod.number().optional().describe('Acceptable slippage in basis points (0–100, default 50 = 0.5%)')
+})
+
+export const ExecuteGaslessSwapResponse = zod.object({
+  "txHash": zod.string().describe('On-chain transaction hash of the relayed swap'),
+  "tokenIn": zod.string(),
+  "tokenOut": zod.string(),
+  "amountIn": zod.string(),
+  "amountOutMin": zod.string().describe('Minimum output enforced on-chain')
+})
+
+
+/**
  * @summary Get gasless relay fee info
  */
 export const GetGaslessFeeResponse = zod.object({

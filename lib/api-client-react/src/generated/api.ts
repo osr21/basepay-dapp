@@ -30,13 +30,17 @@ import type {
   GaslessFeeInfo,
   GaslessTransferInput,
   GaslessTransferResult,
+  GetSwapQuoteParams,
   HealthStatus,
   ListContactsParams,
   ListPaymentRequestsParams,
   PaymentRequest,
   PaymentRequestInput,
   PaymentRequestUpdate,
-  PaymentStats
+  PaymentStats,
+  SwapInput,
+  SwapQuoteResult,
+  SwapResult
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -664,6 +668,161 @@ export const useUpdatePaymentRequest = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdatePaymentRequestMutationOptions(options));
+    }
+
+export const getGetSwapQuoteUrl = (params: GetSwapQuoteParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/swap/quote?${stringifiedParams}` : `/api/swap/quote`
+}
+
+/**
+ * @summary Get a Uniswap V3 quote for a USDC↔EURC swap
+ */
+export const getSwapQuote = async (params: GetSwapQuoteParams, options?: RequestInit): Promise<SwapQuoteResult> => {
+
+  return customFetch<SwapQuoteResult>(getGetSwapQuoteUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSwapQuoteQueryKey = (params?: GetSwapQuoteParams,) => {
+    return [
+    `/api/swap/quote`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetSwapQuoteQueryOptions = <TData = Awaited<ReturnType<typeof getSwapQuote>>, TError = ErrorType<ErrorResponse>>(params: GetSwapQuoteParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSwapQuote>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSwapQuoteQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSwapQuote>>> = ({ signal }) => getSwapQuote(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSwapQuote>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSwapQuoteQueryResult = NonNullable<Awaited<ReturnType<typeof getSwapQuote>>>
+export type GetSwapQuoteQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a Uniswap V3 quote for a USDC↔EURC swap
+ */
+
+export function useGetSwapQuote<TData = Awaited<ReturnType<typeof getSwapQuote>>, TError = ErrorType<ErrorResponse>>(
+ params: GetSwapQuoteParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSwapQuote>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSwapQuoteQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getExecuteGaslessSwapUrl = () => {
+
+
+
+
+  return `/api/swap/execute`
+}
+
+/**
+ * @summary Execute a gasless USDC↔EURC swap via EIP-2612 permit + Uniswap V3 relayer
+ */
+export const executeGaslessSwap = async (swapInput: SwapInput, options?: RequestInit): Promise<SwapResult> => {
+
+  return customFetch<SwapResult>(getExecuteGaslessSwapUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      swapInput,)
+  }
+);}
+
+
+
+
+export const getExecuteGaslessSwapMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof executeGaslessSwap>>, TError,{data: BodyType<SwapInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof executeGaslessSwap>>, TError,{data: BodyType<SwapInput>}, TContext> => {
+
+const mutationKey = ['executeGaslessSwap'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof executeGaslessSwap>>, {data: BodyType<SwapInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  executeGaslessSwap(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExecuteGaslessSwapMutationResult = NonNullable<Awaited<ReturnType<typeof executeGaslessSwap>>>
+    export type ExecuteGaslessSwapMutationBody = BodyType<SwapInput>
+    export type ExecuteGaslessSwapMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Execute a gasless USDC↔EURC swap via EIP-2612 permit + Uniswap V3 relayer
+ */
+export const useExecuteGaslessSwap = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof executeGaslessSwap>>, TError,{data: BodyType<SwapInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof executeGaslessSwap>>,
+        TError,
+        {data: BodyType<SwapInput>},
+        TContext
+      > => {
+      return useMutation(getExecuteGaslessSwapMutationOptions(options));
     }
 
 export const getGetGaslessFeeUrl = () => {

@@ -176,6 +176,46 @@ export interface GaslessTransferResult {
   value: string;
 }
 
+export interface SwapQuoteResult {
+  /** Expected output amount in atomic units */
+  amountOut: string;
+  /** Minimum output amount after 1% slippage guard */
+  amountOutMin: string;
+  /** Uniswap V3 pool fee tier (e.g. 500 = 0.05%) */
+  fee: number;
+}
+
+export interface SwapInput {
+  /** Input token contract address (USDC or EURC) */
+  tokenIn: string;
+  /** Output token contract address (USDC or EURC) */
+  tokenOut: string;
+  /** Input amount in atomic units (6 decimals) as decimal string */
+  amountIn: string;
+  /** Wallet address of the token owner (signer of the permit) */
+  owner: string;
+  /** Unix timestamp permit deadline */
+  deadline: string;
+  /** Permit signature v component */
+  permitV: number;
+  /** Permit signature r component (0x-prefixed 32-byte hex) */
+  permitR: string;
+  /** Permit signature s component (0x-prefixed 32-byte hex) */
+  permitS: string;
+  /** Acceptable slippage in basis points (0–100, default 50 = 0.5%) */
+  slippageBps?: number;
+}
+
+export interface SwapResult {
+  /** On-chain transaction hash of the relayed swap */
+  txHash: string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string;
+  /** Minimum output enforced on-chain */
+  amountOutMin: string;
+}
+
 export interface ErrorResponse {
   error: string;
 }
@@ -193,5 +233,20 @@ ownerAddress: string;
 
 export type ListPaymentRequestsParams = {
 recipientAddress?: string;
+};
+
+export type GetSwapQuoteParams = {
+/**
+ * Input token address
+ */
+tokenIn: string;
+/**
+ * Output token address
+ */
+tokenOut: string;
+/**
+ * Input amount in atomic units (6 decimals)
+ */
+amountIn: string;
 };
 

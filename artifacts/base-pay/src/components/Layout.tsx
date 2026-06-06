@@ -10,6 +10,7 @@ const NAV = [
   { path: "/",             label: "Dashboard",   icon: HomeIcon         },
   { path: "/send",         label: "Send",        icon: SendIcon         },
   { path: "/gasless",      label: "Gasless",     icon: GaslessIcon, badge: "0 gas" },
+  { path: "/swap",         label: "Swap",        icon: SwapNavIcon      },
   { path: "/batch-pay",    label: "Batch Pay",   icon: BatchIcon        },
   { path: "/request",      label: "Request",     icon: RequestIcon      },
   { path: "/requests",     label: "My Requests", icon: ListIcon         },
@@ -50,6 +51,9 @@ function RepeatIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>;
 }
 
+function SwapNavIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 16V4m0 0L3 8m4-4 4 4"/><path d="M17 8v12m0 0 4-4m-4 4-4-4"/></svg>;
+}
 function WrongNetworkBanner() {
   const { isConnected } = useAccount();
   const chainId = useChainId();

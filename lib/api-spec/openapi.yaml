@@ -19,6 +19,8 @@ tags:
     description: dApp registration and configuration
   - name: gasless
     description: Gasless USDC transfers via EIP-3009 relayer
+  - name: swap
+    description: Gasless USDC↔EURC swaps via Uniswap V3 + EIP-2612 permit relayer
 
 paths:
   /healthz:
@@ -182,6 +184,78 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PaymentRequest"
+
+  /swap/quote:
+    get:
+      operationId: getSwapQuote
+      tags: [swap]
+      summary: Get a Uniswap V3 quote for a USDC↔EURC swap
+      parameters:
+        - name: tokenIn
+          in: query
+          required: true
+          schema: { type: string }
+          description: Input token address
+        - name: tokenOut
+          in: query
+          required: true
+          schema: { type: string }
+          description: Output token address
+        - name: amountIn
+          in: query
+          required: true
+          schema: { type: string }
+          description: Input amount in atomic units (6 decimals)
+      responses:
+        "200":
+          description: Swap quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwapQuoteResult"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Pool unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /swap/execute:
+    post:
+      operationId: executeGaslessSwap
+      tags: [swap]
+      summary: Execute a gasless USDC↔EURC swap via EIP-2612 permit + Uniswap V3 relayer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SwapInput"
+      responses:
+        "200":
+          description: Swap relayed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwapResult"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Relay error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /gasless/fee:
     get:
@@ -507,6 +581,69 @@ components:
         value:
           type: string
           description: Amount transferred in atomic units
+
+    SwapQuoteResult:
+      type: object
+      required: [amountOut, amountOutMin, fee]
+      properties:
+        amountOut:
+          type: string
+          description: Expected output amount in atomic units
+        amountOutMin:
+          type: string
+          description: Minimum output amount after 1% slippage guard
+        fee:
+          type: integer
+          description: Uniswap V3 pool fee tier (e.g. 500 = 0.05%)
+
+    SwapInput:
+      type: object
+      required: [tokenIn, tokenOut, amountIn, owner, deadline, permitV, permitR, permitS]
+      properties:
+        tokenIn:
+          type: string
+          description: Input token contract address (USDC or EURC)
+        tokenOut:
+          type: string
+          description: Output token contract address (USDC or EURC)
+        amountIn:
+          type: string
+          description: Input amount in atomic units (6 decimals) as decimal string
+        owner:
+          type: string
+          description: Wallet address of the token owner (signer of the permit)
+        deadline:
+          type: string
+          description: Unix timestamp permit deadline
+        permitV:
+          type: integer
+          description: Permit signature v component
+        permitR:
+          type: string
+          description: Permit signature r component (0x-prefixed 32-byte hex)
+        permitS:
+          type: string
+          description: Permit signature s component (0x-prefixed 32-byte hex)
+        slippageBps:
+          type: integer
+          description: Acceptable slippage in basis points (0–100, default 50 = 0.5%)
+
+    SwapResult:
+      type: object
+      required: [txHash, tokenIn, tokenOut, amountIn, amountOutMin]
+      properties:
+        txHash:
+          type: string
+          description: On-chain transaction hash of the relayed swap
+        tokenIn:
+          type: string
+        tokenOut:
+          type: string
+        amountIn:
+          type: string
+        amountOutMin:
+          type: string
+          description: Minimum output enforced on-chain
 
     ErrorResponse:
       type: object

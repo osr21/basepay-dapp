@@ -16,6 +16,7 @@ import ContactsPage from "@/pages/Contacts";
 import PayPage from "@/pages/Pay";
 import AppInfoPage from "@/pages/AppInfo";
 import GaslessTransferPage from "@/pages/GaslessTransfer";
+import SwapPage from "@/pages/Swap";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -43,6 +44,7 @@ function Router() {
         <Route path="/contacts" component={ContactsPage} />
         <Route path="/app-info" component={AppInfoPage} />
         <Route path="/gasless" component={GaslessTransferPage} />
+        <Route path="/swap" component={SwapPage} />
         <Route path="/pay/:id" component={PayPage} />
         <Route component={NotFound} />
       </Switch>

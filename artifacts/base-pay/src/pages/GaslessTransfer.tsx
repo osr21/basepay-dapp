@@ -13,18 +13,22 @@ import WalletName from "@/components/WalletName";
 type Step = "idle" | "signing" | "relaying" | "done";
 
 export default function GaslessTransferPage() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector } = useAccount();
   const publicClient = usePublicClient();
 
   // Detect smart contract wallets — EIP-3009 requires an EOA signature (ecrecover),
   // so smart wallets (Coinbase Smart Wallet, Safe, etc.) are incompatible.
+  //
+  // Injected wallets (MetaMask, Brave, etc.) are always EOAs — skip the RPC call.
+  // Only SDK-based connectors (coinbaseWalletSDK, WalletConnect, etc.) may be contracts.
+  const isInjected = connector?.id === "injected";
   const { data: bytecode } = useQuery({
     queryKey: ["walletBytecode", address],
     queryFn:  () => publicClient!.getBytecode({ address: address! }),
-    enabled:  !!address && !!publicClient,
+    enabled:  !!address && !!publicClient && !isInjected,
     staleTime: 60_000,
   });
-  const isSmartWallet = !!bytecode && bytecode !== "0x";
+  const isSmartWallet = !isInjected && !!bytecode && bytecode !== "0x";
 
   const [to,       setTo]       = useState("");
   const [amount,   setAmount]   = useState("");

@@ -8,7 +8,6 @@ import {
   http,
   parseAbi,
   encodeFunctionData,
-  concat,
   isAddress,
   isHex,
   type Hex,
@@ -23,17 +22,23 @@ const router = Router();
 
 // ── x402 payment configuration ────────────────────────────────────────────────
 // The payTo address receives USDC for each paid relay.
-const PAY_TO = (process.env.FEE_COLLECTOR_ADDRESS ?? "") as `0x${string}`;
+const _rawPayTo = process.env.FEE_COLLECTOR_ADDRESS ?? "";
+const PAY_TO: `0x${string}` | "" =
+  _rawPayTo.startsWith("0x") && _rawPayTo.length === 42
+    ? (_rawPayTo as `0x${string}`)
+    : "";
 const RELAY_PRICE = "$0.001"; // 0.1¢ USDC per relay
 const BASE_CHAIN_ID = "eip155:8453"; // Base Mainnet
 
 let _x402Middleware: ReturnType<typeof paymentMiddleware> | null = null;
+// "unknown" → not yet checked; "ok" → facilitator supports our network; "unavailable" → it doesn't
+let _facilitatorStatus: "unknown" | "ok" | "unavailable" = "unknown";
 
 function getX402Middleware(): ReturnType<typeof paymentMiddleware> {
   if (_x402Middleware) return _x402Middleware;
 
   const facilitatorClient = new HTTPFacilitatorClient({
-    url: "https://facilitator.x402.org",
+    url: "https://x402.org/facilitator",
   });
 
   const resourceServer = new x402ResourceServer(facilitatorClient).register(
@@ -57,6 +62,65 @@ function getX402Middleware(): ReturnType<typeof paymentMiddleware> {
   );
 
   return _x402Middleware;
+}
+
+/**
+ * Wraps the x402 paymentMiddleware and intercepts configuration-error responses
+ * (status 500 with "Route Configuration Errors" body) that the library emits when
+ * the public facilitator doesn't support the configured chain/scheme. On detection
+ * we flip `_facilitatorStatus` to "unavailable" so subsequent requests short-circuit
+ * immediately instead of re-invoking the middleware.
+ */
+function x402Gate(
+  req: Parameters<ReturnType<typeof paymentMiddleware>>[0],
+  res: Parameters<ReturnType<typeof paymentMiddleware>>[1],
+  next: Parameters<ReturnType<typeof paymentMiddleware>>[2],
+) {
+  if (_facilitatorStatus === "unavailable") {
+    return res.status(503).json({
+      error: "x402 payment facilitation unavailable for this network",
+      detail: `The public facilitator (x402.org) does not support ${BASE_CHAIN_ID}. ` +
+        "Configure a mainnet facilitator (e.g. Coinbase CDP) for production use.",
+      docs: "https://www.x402.org",
+    });
+  }
+
+  const origJson = res.json.bind(res) as typeof res.json;
+
+  // Intercept the middleware's 500 "Route Configuration Errors" response
+  (res as typeof res & { json: typeof res.json }).json = (body: unknown) => {
+    const isConfigError =
+      res.statusCode === 500 &&
+      typeof body === "object" &&
+      body !== null &&
+      "error" in body &&
+      typeof (body as { error: unknown }).error === "string" &&
+      ((body as { error: string }).error.includes("Route Configuration Errors") ||
+        (body as { error: string }).error.includes("does not support") ||
+        (body as { error: string }).error.includes("no supported payment kinds"));
+
+    // Restore before any further calls to prevent double-wrapping
+    (res as typeof res & { json: typeof res.json }).json = origJson;
+
+    if (isConfigError) {
+      _facilitatorStatus = "unavailable";
+      req.log.warn(
+        { network: BASE_CHAIN_ID },
+        "x402 facilitator does not support this network — payment gate disabled",
+      );
+      return res.status(503).json({
+        error: "x402 payment facilitation unavailable for this network",
+        detail: `The public facilitator (x402.org) does not support ${BASE_CHAIN_ID}. ` +
+          "Configure a mainnet facilitator (e.g. Coinbase CDP) for production use.",
+        docs: "https://www.x402.org",
+      });
+    }
+
+    _facilitatorStatus = "ok";
+    return origJson(body);
+  };
+
+  return getX402Middleware()(req, res, next);
 }
 
 // ── Chain clients (singletons) ────────────────────────────────────────────────
@@ -88,6 +152,7 @@ const USDC_ABI = parseAbi([
   "function balanceOf(address account) external view returns (uint256)",
 ]);
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const MAX_VALUE = 1_000_000_000_000n; // 1M USDC
 
 const X402RelaySchema = z.object({
@@ -112,10 +177,10 @@ router.get("/v2/relay/info", (_req, res) => {
     price: RELAY_PRICE,
     network: BASE_CHAIN_ID,
     payTo: PAY_TO || null,
-    facilitator: "https://facilitator.x402.org",
+    facilitator: "https://x402.org/facilitator",
     description:
       "x402-gated USDC relay. Include a valid x402 payment header to access POST /api/v2/relay.",
-    docs: "https://x402.org",
+    docs: "https://www.x402.org",
   });
 });
 
@@ -125,12 +190,11 @@ router.get("/v2/relay/info", (_req, res) => {
 router.post(
   "/v2/relay",
   (req, res, next) => {
-    if (!PAY_TO || !PAY_TO.startsWith("0x")) {
+    if (!PAY_TO) {
       req.log.warn("x402 relay: FEE_COLLECTOR_ADDRESS not set — skipping payment gate");
       return next();
     }
-    const mw = getX402Middleware();
-    return mw(req, res, next);
+    return x402Gate(req, res, next);
   },
   async (req, res) => {
     const parsed = X402RelaySchema.safeParse(req.body);
@@ -143,9 +207,12 @@ router.post(
 
     if (valueBig === 0n) return res.status(400).json({ error: "Value must be greater than zero" });
     if (valueBig > MAX_VALUE) return res.status(400).json({ error: "Value exceeds 1,000,000 USDC limit" });
+    if (from.toLowerCase() === ZERO_ADDRESS) return res.status(400).json({ error: "Invalid sender address" });
+    if (to.toLowerCase() === ZERO_ADDRESS) return res.status(400).json({ error: "Invalid recipient address" });
     if (from.toLowerCase() === to.toLowerCase()) return res.status(400).json({ error: "Sender and recipient must differ" });
 
     const now = BigInt(Math.floor(Date.now() / 1000));
+    if (BigInt(validBefore) <= BigInt(validAfter)) return res.status(400).json({ error: "validBefore must be after validAfter" });
     if (now < BigInt(validAfter)) return res.status(400).json({ error: "Authorization not yet valid" });
     if (now >= BigInt(validBefore)) return res.status(400).json({ error: "Authorization has expired" });
 

@@ -44,6 +44,32 @@ function getRelayer(): Relayer {
   return _relayer;
 }
 
+// ── Retry helper for EIP-7702 "in-flight transaction limit" ─────────────────
+// Base RPC enforces max 1 pending tx at a time for EIP-7702 delegated accounts.
+// Even after waitForTransactionReceipt confirms a tx there is a brief window
+// where the sequencer still considers it in-flight. Retry with linear backoff.
+async function writeWithRetry<T>(
+  fn:          () => Promise<T>,
+  label:       string,
+  maxAttempts  = 6,
+): Promise<T> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("in-flight transaction limit") && attempt < maxAttempts - 1) {
+        const delayMs = 1_500 * (attempt + 1); // 1.5 s, 3 s, 4.5 s …
+        logger.warn({ attempt, delayMs, label }, "in-flight limit — backing off");
+        await new Promise(r => setTimeout(r, delayMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("unreachable");
+}
+
 // ── Aerodrome Finance on Base ─────────────────────────────────────────────────
 // Aerodrome is the dominant AMM on Base; USDC/EURC has active pools here.
 // (Uniswap V3 USDC/EURC pools have zero liquidity on Base.)
@@ -317,22 +343,25 @@ router.post("/swap/execute", async (req, res) => {
   // ── TX 1: submit the EIP-2612 permit (sets allowance for relayer to pull tokens) ──
   let permitHash: Hex;
   try {
-    permitHash = await relayer.client.writeContract({
-      chain:        base,
-      account:      relayer.account,
-      address:      pair.tokenIn,
-      abi:          ERC20_ABI,
-      functionName: "permit",
-      args:         [
-        owner as `0x${string}`,
-        relayer.account.address,
-        amountBig,
-        deadlineBig,
-        permitV,
-        permitR as `0x${string}`,
-        permitS as `0x${string}`,
-      ],
-    });
+    permitHash = await writeWithRetry(
+      () => relayer.client.writeContract({
+        chain:        base,
+        account:      relayer.account,
+        address:      pair.tokenIn,
+        abi:          ERC20_ABI,
+        functionName: "permit",
+        args:         [
+          owner as `0x${string}`,
+          relayer.account.address,
+          amountBig,
+          deadlineBig,
+          permitV,
+          permitR as `0x${string}`,
+          permitS as `0x${string}`,
+        ],
+      }),
+      "TX1 permit",
+    );
     const permitReceipt = await publicClient.waitForTransactionReceipt({ hash: permitHash, confirmations: 1 });
     // A reverted permit TX still produces a receipt — check status explicitly.
     if (permitReceipt.status !== "success") {
@@ -374,14 +403,17 @@ router.post("/swap/execute", async (req, res) => {
   // ── TX 2: pull tokens from user to relayer ────────────────────────────────
   let pullHash: Hex;
   try {
-    pullHash = await relayer.client.writeContract({
-      chain:        base,
-      account:      relayer.account,
-      address:      pair.tokenIn,
-      abi:          ERC20_ABI,
-      functionName: "transferFrom",
-      args:         [owner as `0x${string}`, relayer.account.address, amountBig],
-    });
+    pullHash = await writeWithRetry(
+      () => relayer.client.writeContract({
+        chain:        base,
+        account:      relayer.account,
+        address:      pair.tokenIn,
+        abi:          ERC20_ABI,
+        functionName: "transferFrom",
+        args:         [owner as `0x${string}`, relayer.account.address, amountBig],
+      }),
+      "TX2 transferFrom",
+    );
     const pullReceipt = await publicClient.waitForTransactionReceipt({ hash: pullHash, confirmations: 1 });
     if (pullReceipt.status !== "success") {
       req.log.error({ pullHash, permitHash, status: pullReceipt.status }, "swap TX2 (transferFrom) reverted");
@@ -402,14 +434,17 @@ router.post("/swap/execute", async (req, res) => {
   if (currentAllowance < amountBig) {
     try {
       req.log.info({ token: pair.tokenIn }, "Approving Aerodrome router inline");
-      const approveHash = await relayer.client.writeContract({
-        chain:        base,
-        account:      relayer.account,
-        address:      pair.tokenIn,
-        abi:          ERC20_ABI,
-        functionName: "approve",
-        args:         [AERODROME_ROUTER, maxUint256],
-      });
+      const approveHash = await writeWithRetry(
+        () => relayer.client.writeContract({
+          chain:        base,
+          account:      relayer.account,
+          address:      pair.tokenIn,
+          abi:          ERC20_ABI,
+          functionName: "approve",
+          args:         [AERODROME_ROUTER, maxUint256],
+        }),
+        "TX3 approve",
+      );
       await publicClient.waitForTransactionReceipt({ hash: approveHash, confirmations: 1 });
     } catch (err) {
       req.log.error({ err }, "Inline approve failed");
@@ -421,15 +456,17 @@ router.post("/swap/execute", async (req, res) => {
   const routes = [{ from: pair.tokenIn, to: pair.tokenOut, stable: poolStable, factory: AERODROME_FACTORY }];
   let swapHash: Hex;
   try {
-    const swapCalldata = {
-      chain:        base,
-      account:      relayer.account,
-      address:      AERODROME_ROUTER,
-      abi:          AERODROME_ROUTER_ABI,
-      functionName: "swapExactTokensForTokens" as const,
-      args:         [amountBig, amountOutMin, routes, relayer.account.address, deadlineBig] as const,
-    };
-    swapHash = await relayer.client.writeContract(swapCalldata);
+    swapHash = await writeWithRetry(
+      () => relayer.client.writeContract({
+        chain:        base,
+        account:      relayer.account,
+        address:      AERODROME_ROUTER,
+        abi:          AERODROME_ROUTER_ABI,
+        functionName: "swapExactTokensForTokens" as const,
+        args:         [amountBig, amountOutMin, routes, relayer.account.address, deadlineBig] as const,
+      }),
+      "TX4 swap",
+    );
     await publicClient.waitForTransactionReceipt({ hash: swapHash, confirmations: 1 });
   } catch (err) {
     const raw   = err instanceof Error ? err.message : "Swap failed";
@@ -444,17 +481,20 @@ router.post("/swap/execute", async (req, res) => {
   const userAmount = (amountOutMin * (10_000n - SWAP_FEE_BPS)) / 10_000n;
   let transferHash: Hex;
   try {
-    transferHash = await relayer.client.writeContract({
-      chain:        base,
-      account:      relayer.account,
-      address:      pair.tokenOut,
-      abi:          ERC20_ABI,
-      functionName: "transfer",
-      args:         [owner as `0x${string}`, userAmount],
-    });
+    transferHash = await writeWithRetry(
+      () => relayer.client.writeContract({
+        chain:        base,
+        account:      relayer.account,
+        address:      pair.tokenOut,
+        abi:          ERC20_ABI,
+        functionName: "transfer",
+        args:         [owner as `0x${string}`, userAmount],
+      }),
+      "TX5 transfer to user",
+    );
   } catch (err) {
     req.log.error({ err, swapHash, owner, tokenOut: pair.tokenOut, userAmount: userAmount.toString() },
-      "swap TX4 (user transfer) failed — manual recovery needed");
+      "swap TX5 (user transfer) failed — manual recovery needed");
     return res.status(500).json({ error: "Swap succeeded but output transfer failed. Contact support.", swapHash });
   }
 

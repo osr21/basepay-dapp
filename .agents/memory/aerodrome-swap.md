@@ -51,6 +51,14 @@ The permit TX **reverts on-chain** but `viem.waitForTransactionReceipt` does NOT
 **Why viem doesn't throw on revert:** `waitForTransactionReceipt` resolves when the TX is included
 in a block regardless of its execution outcome. You must check `receipt.status` yourself.
 
+## EIP-7702 relayer "in-flight transaction limit" retry
+
+The RELAYER wallet (`0xdb5019b8...`) is itself an EIP-7702 delegated account. Base RPC enforces a
+limit of 1 pending tx at a time for delegated accounts. Even after `waitForTransactionReceipt({ confirmations: 1 })` returns, there is a brief window where the Base sequencer still considers the previous tx in-flight, causing the next `eth_sendRawTransaction` to fail with:
+`"in-flight transaction limit reached for delegated accounts"`
+
+**Fix:** `writeWithRetry(fn, label, maxAttempts=6)` — catches the in-flight error, waits 1.5s × (attempt+1), retries up to 6 times. Wrap ALL `relayer.client.writeContract` calls in this helper (TX1–TX5).
+
 ## Token address comparison gotcha
 
 Always define lowercase constants for comparison:

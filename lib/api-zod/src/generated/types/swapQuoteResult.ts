@@ -11,7 +11,7 @@ export interface SwapQuoteResult {
   amountOut: string;
   /** Minimum output amount after 1% slippage guard (before protocol fee) */
   amountOutMin: string;
-  /** Uniswap V3 pool fee tier (e.g. 500 = 0.05%) */
+  /** Aerodrome pool type indicator (100 = stable pool, 500 = volatile pool) */
   fee: number;
   /** BasePay protocol fee in basis points (e.g. 30 = 0.30%) */
   protocolFeeBps: number;
@@ -19,4 +19,8 @@ export interface SwapQuoteResult {
   protocolFeeAmount: string;
   /** Net output amount the user receives after protocol fee */
   amountOutAfterFee: string;
+  /** Relayer wallet address — use as the EIP-2612 permit spender */
+  relayerAddress?: string;
+  /** Whether the best Aerodrome pool is stable (true) or volatile (false) */
+  stable?: boolean;
 }

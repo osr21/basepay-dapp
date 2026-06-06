@@ -7,7 +7,7 @@
  */
 
 export interface SwapResult {
-  /** On-chain hash of the swap transaction (permit + exactInputSingle) */
+  /** On-chain hash of the Aerodrome swap transaction */
   txHash: string;
   /** On-chain hash of the relayer→user output token transfer */
   transferHash: string;

@@ -20,7 +20,7 @@ tags:
   - name: gasless
     description: Gasless USDC transfers via EIP-3009 relayer
   - name: swap
-    description: Gasless USDC↔EURC swaps via Uniswap V3 + EIP-2612 permit relayer
+    description: Gasless USDC↔EURC swaps via Aerodrome Finance + EIP-2612 permit relayer
 
 paths:
   /healthz:
@@ -189,7 +189,7 @@ paths:
     get:
       operationId: getSwapQuote
       tags: [swap]
-      summary: Get a Uniswap V3 quote for a USDC↔EURC swap
+      summary: Get an Aerodrome quote for a USDC↔EURC swap
       parameters:
         - name: tokenIn
           in: query
@@ -230,7 +230,7 @@ paths:
     post:
       operationId: executeGaslessSwap
       tags: [swap]
-      summary: Execute a gasless USDC↔EURC swap via EIP-2612 permit + Uniswap V3 relayer
+      summary: Execute a gasless USDC↔EURC swap via EIP-2612 permit + Aerodrome relayer
       requestBody:
         required: true
         content:
@@ -594,7 +594,7 @@ components:
           description: Minimum output amount after 1% slippage guard (before protocol fee)
         fee:
           type: integer
-          description: Uniswap V3 pool fee tier (e.g. 500 = 0.05%)
+          description: Aerodrome pool type indicator (100 = stable pool, 500 = volatile pool)
         protocolFeeBps:
           type: integer
           description: BasePay protocol fee in basis points (e.g. 30 = 0.30%)
@@ -604,6 +604,12 @@ components:
         amountOutAfterFee:
           type: string
           description: Net output amount the user receives after protocol fee
+        relayerAddress:
+          type: string
+          description: Relayer wallet address — use as the EIP-2612 permit spender
+        stable:
+          type: boolean
+          description: Whether the best Aerodrome pool is stable (true) or volatile (false)
 
     SwapInput:
       type: object
@@ -643,7 +649,7 @@ components:
       properties:
         txHash:
           type: string
-          description: On-chain hash of the swap transaction (permit + exactInputSingle)
+          description: On-chain hash of the Aerodrome swap transaction
         transferHash:
           type: string
           description: On-chain hash of the relayer→user output token transfer

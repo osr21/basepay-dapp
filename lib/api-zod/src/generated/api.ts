@@ -147,7 +147,7 @@ export const UpdatePaymentRequestResponse = zod.object({
 
 
 /**
- * @summary Get a Uniswap V3 quote for a USDC↔EURC swap
+ * @summary Get an Aerodrome quote for a USDC↔EURC swap
  */
 export const GetSwapQuoteQueryParams = zod.object({
   "tokenIn": zod.coerce.string().describe('Input token address'),
@@ -158,15 +158,17 @@ export const GetSwapQuoteQueryParams = zod.object({
 export const GetSwapQuoteResponse = zod.object({
   "amountOut": zod.string().describe('Expected gross output amount in atomic units (before protocol fee)'),
   "amountOutMin": zod.string().describe('Minimum output amount after 1% slippage guard (before protocol fee)'),
-  "fee": zod.number().describe('Uniswap V3 pool fee tier (e.g. 500 = 0.05%)'),
+  "fee": zod.number().describe('Aerodrome pool type indicator (100 = stable pool, 500 = volatile pool)'),
   "protocolFeeBps": zod.number().describe('BasePay protocol fee in basis points (e.g. 30 = 0.30%)'),
   "protocolFeeAmount": zod.string().describe('Protocol fee amount in atomic units deducted from amountOut'),
-  "amountOutAfterFee": zod.string().describe('Net output amount the user receives after protocol fee')
+  "amountOutAfterFee": zod.string().describe('Net output amount the user receives after protocol fee'),
+  "relayerAddress": zod.string().optional().describe('Relayer wallet address — use as the EIP-2612 permit spender'),
+  "stable": zod.boolean().optional().describe('Whether the best Aerodrome pool is stable (true) or volatile (false)')
 })
 
 
 /**
- * @summary Execute a gasless USDC↔EURC swap via EIP-2612 permit + Uniswap V3 relayer
+ * @summary Execute a gasless USDC↔EURC swap via EIP-2612 permit + Aerodrome relayer
  */
 export const ExecuteGaslessSwapBody = zod.object({
   "tokenIn": zod.string().describe('Input token contract address (USDC or EURC)'),
@@ -181,7 +183,7 @@ export const ExecuteGaslessSwapBody = zod.object({
 })
 
 export const ExecuteGaslessSwapResponse = zod.object({
-  "txHash": zod.string().describe('On-chain hash of the swap transaction (permit + exactInputSingle)'),
+  "txHash": zod.string().describe('On-chain hash of the Aerodrome swap transaction'),
   "transferHash": zod.string().describe('On-chain hash of the relayer→user output token transfer'),
   "tokenIn": zod.string(),
   "tokenOut": zod.string(),

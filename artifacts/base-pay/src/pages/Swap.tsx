@@ -7,9 +7,6 @@ import { GASLESS_TOKENS, type GaslessToken } from "@/lib/wagmi";
 import { useTokenPermit } from "@/lib/useTokenPermit";
 import { WalletButton } from "@/components/Layout";
 
-// Uniswap V3 SwapRouter02 on Base — permit spender (selfPermit in multicall)
-const SWAP_ROUTER = "0x2626664c2603336E57B271c5C0b26F421741e481" as const;
-
 type Step = "idle" | "signing" | "swapping" | "done";
 
 const BALANCE_ABI = [
@@ -88,7 +85,7 @@ export default function SwapPage() {
     },
   );
 
-  // Clear quote when amount or direction changes
+  // Clear errors when amount or direction changes
   useEffect(() => {
     setError(undefined);
   }, [amount, fromIdx]);
@@ -97,10 +94,10 @@ export default function SwapPage() {
   const { signPermit }              = useTokenPermit(address, fromToken);
   const { mutateAsync: execSwap }   = useExecuteGaslessSwap();
 
-  const canSwap = !!amountBig && amountBig > 0n && !!quote && step === "idle" && isConnected;
+  const canSwap = !!amountBig && amountBig > 0n && !!quote && !!quote.relayerAddress && step === "idle" && isConnected;
 
   async function handleSwap() {
-    if (!canSwap || !address) return;
+    if (!canSwap || !address || !quote?.relayerAddress) return;
     setError(undefined);
 
     // Check balance
@@ -111,7 +108,9 @@ export default function SwapPage() {
 
     try {
       setStep("signing");
-      const { v, r, s, deadline } = await signPermit(SWAP_ROUTER, amountBig!, 1_800);
+      // Permit spender = relayer wallet (relayer calls token.permit, then transferFrom)
+      const permitter = quote.relayerAddress as `0x${string}`;
+      const { v, r, s, deadline } = await signPermit(permitter, amountBig!, 1_800);
 
       setStep("swapping");
       const result = await execSwap({
@@ -149,6 +148,9 @@ export default function SwapPage() {
     setAmount("");
   }
 
+  // Aerodrome pool label
+  const poolLabel = quote?.stable ? "Aerodrome (stable)" : "Aerodrome (volatile)";
+
   // ── Not connected ──────────────────────────────────────────────────────────
   if (!isConnected) {
     return (
@@ -172,7 +174,7 @@ export default function SwapPage() {
           <h2 className="text-lg font-bold">Sign permit in wallet</h2>
           <p className="text-sm text-muted-foreground">
             This is an off-chain signature — <span className="text-green-400 font-medium">not a transaction</span>.
-            Authorises the swap router to spend your {fromToken.symbol}. Zero gas from you.
+            Authorises the relayer to pull your {fromToken.symbol}. Zero gas from you.
           </p>
           <p className="text-xs text-muted-foreground font-mono">Waiting for signature...</p>
         </div>
@@ -192,7 +194,7 @@ export default function SwapPage() {
           </div>
           <h2 className="text-lg font-bold">Executing swap...</h2>
           <p className="text-sm text-muted-foreground">
-            The BasePay relayer is executing your swap on Uniswap V3. This takes a moment.
+            The BasePay relayer is executing your swap on Aerodrome Finance. This takes a moment.
           </p>
         </div>
       </div>
@@ -244,7 +246,6 @@ export default function SwapPage() {
   }
 
   // ── Swap form ──────────────────────────────────────────────────────────────
-  // Show net amount after protocol fee so user sees exactly what they'll receive
   const outFormatted = quote
     ? parseFloat(formatUnits(BigInt(quote.amountOutAfterFee), toToken.decimals)).toFixed(4)
     : null;
@@ -257,7 +258,7 @@ export default function SwapPage() {
           <span className="px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-xs text-green-400 font-semibold">Zero ETH</span>
         </div>
         <p className="text-sm text-muted-foreground">
-          Swap USDC ↔ EURC via Uniswap V3 on Base — gasless, one signature
+          Swap USDC ↔ EURC via Aerodrome Finance on Base — gasless, one signature
         </p>
       </div>
 
@@ -363,8 +364,8 @@ export default function SwapPage() {
               </span>
             </div>
             <div className="flex justify-between text-muted-foreground">
-              <span>Pool fee</span>
-              <span>0.05% (Uniswap V3)</span>
+              <span>Pool</span>
+              <span>{poolLabel}</span>
             </div>
             <div className="flex justify-between text-muted-foreground">
               <span>Slippage tolerance</span>
@@ -416,7 +417,7 @@ export default function SwapPage() {
         </button>
 
         <p className="text-center text-xs text-muted-foreground">
-          1 signature · 0 ETH · powered by Uniswap V3
+          1 signature · 0 ETH · powered by Aerodrome Finance
         </p>
       </div>
 
@@ -425,11 +426,11 @@ export default function SwapPage() {
         <p className="text-foreground font-semibold text-sm mb-1">How gasless swap works</p>
         <div className="flex items-start gap-2">
           <span className="text-primary font-bold mt-px">1.</span>
-          <span>You sign an EIP-2612 permit — authorises the swap router off-chain (no gas, no approval tx)</span>
+          <span>You sign an EIP-2612 permit — authorises the relayer off-chain (no gas, no approval tx)</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-primary font-bold mt-px">2.</span>
-          <span>BasePay's relayer submits the permit + Uniswap swap in a single multicall, paying gas</span>
+          <span>BasePay's relayer pulls your tokens, swaps via Aerodrome Finance, and delivers the output — paying all gas</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-green-400 font-bold mt-px">✓</span>

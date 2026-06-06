@@ -686,7 +686,7 @@ export const getGetSwapQuoteUrl = (params: GetSwapQuoteParams,) => {
 }
 
 /**
- * @summary Get a Uniswap V3 quote for a USDC↔EURC swap
+ * @summary Get an Aerodrome quote for a USDC↔EURC swap
  */
 export const getSwapQuote = async (params: GetSwapQuoteParams, options?: RequestInit): Promise<SwapQuoteResult> => {
 
@@ -733,7 +733,7 @@ export type GetSwapQuoteQueryError = ErrorType<ErrorResponse>
 
 
 /**
- * @summary Get a Uniswap V3 quote for a USDC↔EURC swap
+ * @summary Get an Aerodrome quote for a USDC↔EURC swap
  */
 
 export function useGetSwapQuote<TData = Awaited<ReturnType<typeof getSwapQuote>>, TError = ErrorType<ErrorResponse>>(
@@ -763,7 +763,7 @@ export const getExecuteGaslessSwapUrl = () => {
 }
 
 /**
- * @summary Execute a gasless USDC↔EURC swap via EIP-2612 permit + Uniswap V3 relayer
+ * @summary Execute a gasless USDC↔EURC swap via EIP-2612 permit + Aerodrome relayer
  */
 export const executeGaslessSwap = async (swapInput: SwapInput, options?: RequestInit): Promise<SwapResult> => {
 
@@ -812,7 +812,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ExecuteGaslessSwapMutationError = ErrorType<ErrorResponse>
 
     /**
- * @summary Execute a gasless USDC↔EURC swap via EIP-2612 permit + Uniswap V3 relayer
+ * @summary Execute a gasless USDC↔EURC swap via EIP-2612 permit + Aerodrome relayer
  */
 export const useExecuteGaslessSwap = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof executeGaslessSwap>>, TError,{data: BodyType<SwapInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

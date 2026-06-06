@@ -33,6 +33,24 @@ description: Gasless USDC↔EURC swap via Aerodrome Finance on Base — why Unis
 
 **Why permit spender = relayer (not router):** Aerodrome router's `swapExactTokensForTokens` always pulls from `msg.sender`. The router has no `selfPermit`. User must permit the relayer, which then transfers to itself and swaps.
 
+## EIP-7702 smart wallet incompatibility with EIP-2612 permit
+
+User address `0xB14436...` has 23-byte EIP-7702 delegation bytecode (Coinbase Smart Wallet).
+When a passkey-based smart wallet signs `eth_signTypedData`, it produces a WebAuthn signature
+that is NOT valid ECDSA. USDC's `permit()` uses `SignatureChecker.isValidSignatureNow()`, which
+tries `ecrecover` first (fails) then `isValidSignature(owner, digest, abi.encodePacked(r,s,v))`.
+The packed 65-byte truncation isn't the full WebAuthn sig, so the ERC-1271 check fails too.
+The permit TX **reverts on-chain** but `viem.waitForTransactionReceipt` does NOT throw on reverts
+— it just returns the receipt. You must explicitly check `receipt.status === "success"`.
+
+**Fix applied:**
+- Backend: check `receipt.status` after every `waitForTransactionReceipt`; on revert return 400 with clear message about smart wallet incompatibility
+- Backend: post-permit allowance readback as belt-and-suspenders
+- Frontend: `eth_getCode` bytecode check (same pattern as GaslessTransfer.tsx); if bytecode ≠ "0x", show warning + disable swap button
+
+**Why viem doesn't throw on revert:** `waitForTransactionReceipt` resolves when the TX is included
+in a block regardless of its execution outcome. You must check `receipt.status` yourself.
+
 ## Token address comparison gotcha
 
 Always define lowercase constants for comparison:

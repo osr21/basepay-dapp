@@ -333,11 +333,42 @@ router.post("/swap/execute", async (req, res) => {
         permitS as `0x${string}`,
       ],
     });
-    await publicClient.waitForTransactionReceipt({ hash: permitHash, confirmations: 1 });
+    const permitReceipt = await publicClient.waitForTransactionReceipt({ hash: permitHash, confirmations: 1 });
+    // A reverted permit TX still produces a receipt — check status explicitly.
+    if (permitReceipt.status !== "success") {
+      req.log.error({ permitHash, status: permitReceipt.status }, "swap TX1 (permit) reverted on-chain");
+      return res.status(400).json({
+        error:
+          "Permit was rejected by the token contract. Smart wallets that use passkey (WebAuthn) " +
+          "signing are not compatible with EIP-2612 — please connect with a seed-phrase (EOA) wallet.",
+        permitHash,
+      });
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message.slice(0, 150) : "Permit failed";
     req.log.error({ err }, "swap TX1 (permit) failed");
     return res.status(500).json({ error: `Permit failed: ${msg}` });
+  }
+
+  // Belt-and-suspenders: verify the allowance was actually set before pulling.
+  const allowanceAfterPermit = await publicClient.readContract({
+    address:      pair.tokenIn,
+    abi:          ERC20_ABI,
+    functionName: "allowance",
+    args:         [owner as `0x${string}`, relayer.account.address],
+  });
+  if (allowanceAfterPermit < amountBig) {
+    req.log.error(
+      { allowanceAfterPermit: allowanceAfterPermit.toString(), amountIn, permitHash },
+      "permit mined but allowance not set — smart wallet incompatibility suspected",
+    );
+    return res.status(400).json({
+      error:
+        "Permit was accepted on-chain but did not grant the expected allowance. " +
+        "Smart wallets with passkey signing are not compatible with EIP-2612 — " +
+        "please connect with a seed-phrase (EOA) wallet.",
+      permitHash,
+    });
   }
 
   // ── TX 2: pull tokens from user to relayer ────────────────────────────────
@@ -351,7 +382,11 @@ router.post("/swap/execute", async (req, res) => {
       functionName: "transferFrom",
       args:         [owner as `0x${string}`, relayer.account.address, amountBig],
     });
-    await publicClient.waitForTransactionReceipt({ hash: pullHash, confirmations: 1 });
+    const pullReceipt = await publicClient.waitForTransactionReceipt({ hash: pullHash, confirmations: 1 });
+    if (pullReceipt.status !== "success") {
+      req.log.error({ pullHash, permitHash, status: pullReceipt.status }, "swap TX2 (transferFrom) reverted");
+      return res.status(500).json({ error: "Token pull reverted on-chain after permit succeeded. Contact support.", permitHash, pullHash });
+    }
   } catch (err) {
     req.log.error({ err, permitHash }, "swap TX2 (transferFrom) failed");
     return res.status(500).json({ error: "Token pull failed after permit succeeded. Contact support.", permitHash });

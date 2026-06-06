@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient, useReadContract } from "wagmi";
+import { useQuery } from "@tanstack/react-query";
 import { isAddress, parseUnits, formatUnits } from "viem";
-import { useReadContract } from "wagmi";
 import { useGetSwapQuote, useExecuteGaslessSwap, getGetSwapQuoteQueryKey } from "@workspace/api-client-react";
 import { GASLESS_TOKENS, type GaslessToken } from "@/lib/wagmi";
 import { useTokenPermit } from "@/lib/useTokenPermit";
@@ -23,7 +23,21 @@ function TokenBadge({ token }: { token: GaslessToken }) {
 }
 
 export default function SwapPage() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector } = useAccount();
+  const publicClient = usePublicClient();
+
+  // Detect smart wallets — EIP-2612 permit requires an EOA ECDSA signature.
+  // Smart wallets that use passkey (WebAuthn/p256) signing produce signatures
+  // that USDC's permit function cannot verify, causing the permit TX to revert.
+  // Injected wallets (MetaMask, Brave) are always EOAs — skip the RPC call.
+  const isInjected = connector?.id === "injected";
+  const { data: walletBytecode } = useQuery({
+    queryKey:  ["walletBytecode", address],
+    queryFn:   () => publicClient!.getBytecode({ address: address! }),
+    enabled:   !!address && !!publicClient && !isInjected,
+    staleTime: 60_000,
+  });
+  const isSmartWallet = !isInjected && !!walletBytecode && walletBytecode !== "0x";
 
   // Token direction: index 0 = USDC, index 1 = EURC
   const [fromIdx, setFromIdx] = useState(0);
@@ -94,7 +108,7 @@ export default function SwapPage() {
   const { signPermit }              = useTokenPermit(address, fromToken);
   const { mutateAsync: execSwap }   = useExecuteGaslessSwap();
 
-  const canSwap = !!amountBig && amountBig > 0n && !!quote && !!quote.relayerAddress && step === "idle" && isConnected;
+  const canSwap = !isSmartWallet && !!amountBig && amountBig > 0n && !!quote && !!quote.relayerAddress && step === "idle" && isConnected;
 
   async function handleSwap() {
     if (!canSwap || !address || !quote?.relayerAddress) return;
@@ -394,6 +408,20 @@ export default function SwapPage() {
           </p>
         )}
 
+        {isSmartWallet && (
+          <div className="flex items-start gap-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-3 py-2.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgb(234 179 8)" strokeWidth="2" className="shrink-0 mt-0.5">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <p className="text-xs text-yellow-400 leading-relaxed">
+              <span className="font-semibold">Smart wallet detected.</span> Gasless swaps use EIP-2612 permit,
+              which requires a standard EOA (seed-phrase) wallet signature. Passkey-based smart wallets
+              are not compatible. Please connect with MetaMask or a seed-phrase wallet.
+            </p>
+          </div>
+        )}
+
         {error && (
           <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
             {error}
@@ -409,7 +437,9 @@ export default function SwapPage() {
               : "bg-secondary text-muted-foreground cursor-not-allowed"
           }`}
         >
-          {!amount || !amountBig
+          {isSmartWallet
+            ? "Smart wallet not supported — use EOA"
+            : !amount || !amountBig
             ? "Enter an amount"
             : !quote
             ? isQuoting ? "Getting quote…" : "Enter an amount"

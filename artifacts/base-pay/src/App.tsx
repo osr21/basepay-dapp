@@ -1,6 +1,8 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
+import { OnchainKitProvider } from "@coinbase/onchainkit";
+import { base } from "viem/chains";
 import { config } from "@/lib/wagmi";
 import Layout from "@/components/Layout";
 import Dashboard from "@/pages/Dashboard";
@@ -24,6 +26,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+const ONCHAINKIT_API_KEY = import.meta.env.VITE_ONCHAINKIT_API_KEY as string | undefined;
 
 function Router() {
   return (
@@ -50,9 +54,14 @@ export default function App() {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+        <OnchainKitProvider
+          apiKey={ONCHAINKIT_API_KEY}
+          chain={base}
+        >
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+        </OnchainKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

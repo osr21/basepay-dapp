@@ -1,2 +1,4 @@
 - [Gasless Transfer Architecture](gasless-transfer.md) — EIP-3009 relayer via DEPLOYER_PRIVATE_KEY; USDC on Base supports transferWithAuthorization
 - [BaseScan V2 Verification](basescan-verification.md) — must use Etherscan V2 API with chainid in URL query string, not POST body
+- [OnchainKit wagmi/experimental shim](onchainkit-wagmi-shim.md) — OnchainKit 1.x imports wagmi/experimental which was removed in wagmi v3; requires a Vite alias shim
+- [x402 relay route pattern](x402-relay-pattern.md) — x402 middleware must be lazy-initialized; FEE_COLLECTOR_ADDRESS drives payTo; use @x402/evm/exact/server + @x402/core/server

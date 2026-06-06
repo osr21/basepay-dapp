@@ -1,8 +1,23 @@
 import { createConfig, http, createConnector } from "wagmi";
 import { base } from "viem/chains";
-import { injected } from "wagmi/connectors";
+import { injected, coinbaseWallet } from "wagmi/connectors";
 import { concat, type Hex } from "viem";
 import { Attribution } from "ox/erc8021";
+
+// ── CoinbaseSmartWallet (ERC-4337) ────────────────────────────────────────────
+export const COINBASE_SMART_WALLET_FACTORY =
+  "0x0BA5ED0c6AA8c49038F819E587E2633c4A9F428a" as const;
+export const COINBASE_SMART_WALLET_IMPL =
+  "0x000100abaad02f1cfC8Bbe32bD5a564817339E72" as const;
+export const ERC4337_ENTRY_POINT_V07 =
+  "0x0000000071727De22E5E9d8BAf0edAc6f37da032" as const;
+
+// ── Coinbase Verifications (EAS) ──────────────────────────────────────────────
+export const EAS_ADDRESS         = "0x4200000000000000000000000000000000000021" as const;
+export const COINBASE_ATTESTER   = "0x357458739F90461b99789350868CD7CF330Dd7EE" as const;
+export const COINBASE_INDEXER    = "0x2c7eE1E5f416dfF40054c27A62f7B357C4E8619C" as const;
+export const VERIFIED_ACCOUNT_SCHEMA_UID =
+  "0xf8b05c79f090979bf4a80270aba232dff11a10d9ca55c4f88de95317970f0de9" as const;
 
 // ── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
 // Register at base.dev → Settings → Builder Code, then set VITE_BASE_BUILDER_CODE
@@ -53,9 +68,18 @@ function attributedInjected() {
   });
 }
 
+// ── Coinbase Smart Wallet connector (ERC-4337, passkey support) ───────────────
+export const cbSmartWalletConnector = coinbaseWallet({
+  appName: "BasePay",
+  preference: { options: "all" },
+});
+
 export const config = createConfig({
   chains: [base],
-  connectors: [attributedInjected()],
+  connectors: [
+    attributedInjected(),
+    cbSmartWalletConnector,
+  ],
   transports: {
     [base.id]: http(),
   },

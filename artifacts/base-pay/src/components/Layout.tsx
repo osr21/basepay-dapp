@@ -3,7 +3,8 @@ import { useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } fro
 import { injected } from "wagmi/connectors";
 import { base } from "viem/chains";
 import { useGetAppConfig } from "@workspace/api-client-react";
-import { truncateAddress } from "@/lib/wagmi";
+import { truncateAddress, cbSmartWalletConnector } from "@/lib/wagmi";
+import { useState } from "react";
 
 const NAV = [
   { path: "/",             label: "Dashboard",   icon: HomeIcon         },
@@ -77,25 +78,85 @@ function WrongNetworkBanner() {
 }
 
 export function WalletButton() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, connector } = useAccount();
   const { connect }    = useConnect();
   const { disconnect } = useDisconnect();
+  const [showPicker, setShowPicker] = useState(false);
+
+  const isSmartWallet = connector?.id === "coinbaseWalletSDK";
 
   if (isConnected && address) {
     return (
       <button
         onClick={() => disconnect()}
         className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border hover:border-primary/40 transition-all text-sm font-mono text-foreground"
+        title="Click to disconnect"
       >
         <span className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" />
         {truncateAddress(address)}
+        {isSmartWallet && (
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20 leading-none">
+            Smart
+          </span>
+        )}
       </button>
+    );
+  }
+
+  if (showPicker) {
+    return (
+      <div className="relative">
+        <div className="absolute right-0 top-10 z-50 flex flex-col gap-1 p-2 rounded-xl border border-border bg-card shadow-xl min-w-[200px]">
+          <button
+            onClick={() => { connect({ connector: injected() }); setShowPicker(false); }}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-secondary transition-colors text-sm text-left"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect width="20" height="14" x="2" y="5" rx="2"/>
+              <line x1="2" x2="22" y1="10" y2="10"/>
+            </svg>
+            <div>
+              <div className="font-semibold text-foreground">Browser Wallet</div>
+              <div className="text-xs text-muted-foreground">MetaMask, Rabby…</div>
+            </div>
+          </button>
+          <button
+            onClick={() => { connect({ connector: cbSmartWalletConnector }); setShowPicker(false); }}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-secondary transition-colors text-sm text-left"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="12" cy="12" r="10" fill="#0052FF" fillOpacity="0.1" stroke="#0052FF" strokeOpacity="0.6"/>
+              <path d="M8.5 12a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z" fill="#0052FF" fillOpacity="0.8" stroke="none"/>
+            </svg>
+            <div>
+              <div className="font-semibold text-foreground flex items-center gap-1.5">
+                Smart Wallet
+                <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/20 leading-none">NEW</span>
+              </div>
+              <div className="text-xs text-muted-foreground">Passkey · No seed phrase</div>
+            </div>
+          </button>
+          <button
+            onClick={() => setShowPicker(false)}
+            className="text-xs text-muted-foreground text-center py-1.5 hover:text-foreground transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+        <button
+          onClick={() => setShowPicker(false)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-sm font-semibold shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+          Connect Wallet
+        </button>
+      </div>
     );
   }
 
   return (
     <button
-      onClick={() => connect({ connector: injected() })}
+      onClick={() => setShowPicker(true)}
       className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-sm font-semibold shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
     >
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>

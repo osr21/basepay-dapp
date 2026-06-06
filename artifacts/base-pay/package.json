@@ -75,6 +75,8 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@coinbase/onchainkit": "^1.1.2",
+    "@coinbase/wallet-sdk": "^4.3.7",
     "ox": "^0.14.29",
     "qrcode.react": "^4.2.0",
     "viem": "^2.52.0",

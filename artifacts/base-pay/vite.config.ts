@@ -50,6 +50,11 @@ export default defineConfig({
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
       "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
+      // wagmi v3 removed /experimental — shim it so OnchainKit 1.x can bundle without errors
+      "wagmi/experimental": path.resolve(
+        import.meta.dirname,
+        "src/lib/wagmi-experimental-shim.ts",
+      ),
     },
     dedupe: ["react", "react-dom"],
   },

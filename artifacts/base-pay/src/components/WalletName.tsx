@@ -1,4 +1,5 @@
 import { useBasename } from "@/lib/useBasename";
+import { useCoinbaseAttestation } from "@/lib/useCoinbaseAttestation";
 import { truncateAddress } from "@/lib/wagmi";
 
 interface WalletNameProps {
@@ -6,6 +7,7 @@ interface WalletNameProps {
   className?: string;
   showAvatar?: boolean;
   avatarSize?: number;
+  showBadge?: boolean;
 }
 
 function Identicon({ address, size = 28 }: { address: string; size?: number }) {
@@ -40,6 +42,32 @@ function Identicon({ address, size = 28 }: { address: string; size?: number }) {
   );
 }
 
+function CoinbaseBadge({ isCoinbaseOne = false }: { isCoinbaseOne?: boolean }) {
+  return (
+    <span
+      title={isCoinbaseOne ? "Coinbase One member · Verified via EAS" : "Coinbase Verified Account · Verified via EAS"}
+      className="inline-flex items-center"
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0 }}
+      >
+        <circle cx="12" cy="12" r="12" fill={isCoinbaseOne ? "#F59E0B" : "#0052FF"} />
+        <path
+          d="M9 12.5L11 14.5L15 10"
+          stroke="white"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
 export function WalletAvatar({ address, size = 28 }: { address: string | undefined; size?: number }) {
   const { data } = useBasename(address);
   if (!address) return null;
@@ -59,13 +87,25 @@ export function WalletAvatar({ address, size = 28 }: { address: string | undefin
   return <Identicon address={address} size={size} />;
 }
 
-export default function WalletName({ address, className, showAvatar = false, avatarSize = 28 }: WalletNameProps) {
-  const { data, isLoading } = useBasename(address);
+export default function WalletName({
+  address,
+  className,
+  showAvatar = false,
+  avatarSize = 28,
+  showBadge = true,
+}: WalletNameProps) {
+  const { data: basename, isLoading } = useBasename(address);
+  const { data: attestation } = useCoinbaseAttestation(
+    showBadge ? (address as `0x${string}` | undefined) : undefined,
+  );
 
   if (!address) return null;
 
-  const displayName = data?.name ?? truncateAddress(address);
-  const isName = !!data?.name;
+  const displayName = basename?.name ?? truncateAddress(address);
+  const isName = !!basename?.name;
+  const badge = showBadge && attestation?.isVerified ? (
+    <CoinbaseBadge isCoinbaseOne={attestation.isCoinbaseOne} />
+  ) : null;
 
   if (showAvatar) {
     return (
@@ -74,16 +114,18 @@ export default function WalletName({ address, className, showAvatar = false, ava
         <span className={isName ? "text-foreground font-medium" : "font-mono text-muted-foreground"}>
           {isLoading ? truncateAddress(address) : displayName}
         </span>
+        {badge}
       </span>
     );
   }
 
   return (
     <span
-      className={`${isName ? "" : "font-mono"} ${className ?? ""}`}
+      className={`inline-flex items-center gap-1 ${isName ? "" : "font-mono"} ${className ?? ""}`}
       title={address}
     >
-      {isLoading ? truncateAddress(address) : displayName}
+      <span>{isLoading ? truncateAddress(address) : displayName}</span>
+      {badge}
     </span>
   );
 }

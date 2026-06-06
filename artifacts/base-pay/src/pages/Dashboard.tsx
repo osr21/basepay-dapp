@@ -5,6 +5,33 @@ import { useGetStats, getGetStatsQueryKey } from "@workspace/api-client-react";
 import { USDC_ADDRESS, USDC_ABI, USDC_DECIMALS, formatUSDC, truncateAddress } from "@/lib/wagmi";
 import { WalletButton } from "@/components/Layout";
 import WalletName, { WalletAvatar } from "@/components/WalletName";
+function buildOnrampUrl(address: string): string {
+  const encoded = encodeURIComponent(JSON.stringify({ [address]: ["base"] }));
+  const base_ = "https://pay.coinbase.com/buy/select-asset";
+  const appId = import.meta.env.VITE_ONCHAINKIT_API_KEY ?? "";
+  return `${base_}?appId=${appId}&addresses=${encoded}&assets=${encodeURIComponent(JSON.stringify(["USDC"]))}&defaultAsset=USDC&defaultNetwork=base&presetFiatAmount=20`;
+}
+
+function BuyUSDCButton({ address }: { address: string | undefined }) {
+  if (!address) return null;
+
+  return (
+    <a
+      href={buildOnrampUrl(address)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-border text-sm font-semibold hover:border-primary/40 transition-all"
+      title="Buy USDC with fiat via Coinbase Onramp"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" x2="12" y1="8" y2="16"/>
+        <line x1="8" x2="16" y1="12" y2="12"/>
+      </svg>
+      Buy USDC
+    </a>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -99,7 +126,7 @@ export default function Dashboard() {
         </div>
 
         {/* Quick actions */}
-        <div className="flex gap-3 mt-6">
+        <div className="flex flex-wrap gap-3 mt-6">
           <Link href="/send">
             <a className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all shadow-[0_0_16px_hsl(221_83%_53%/0.3)]">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" x2="11" y1="2" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -112,6 +139,7 @@ export default function Dashboard() {
               Request
             </a>
           </Link>
+          <BuyUSDCButton address={address} />
         </div>
       </div>
 

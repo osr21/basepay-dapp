@@ -9,8 +9,10 @@
 export interface GaslessTransferResult {
   /** On-chain transaction hash of the relayed transfer */
   txHash: string;
+  /** Token contract address that was transferred */
+  token: string;
   from: string;
   to: string;
-  /** USDC amount transferred in atomic units */
+  /** Amount transferred in atomic units */
   value: string;
 }

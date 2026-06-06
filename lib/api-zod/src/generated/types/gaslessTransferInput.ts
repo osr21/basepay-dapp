@@ -7,11 +7,14 @@
  */
 
 export interface GaslessTransferInput {
+  /** Token contract address (0x-prefixed). Must be in the relay whitelist. Defaults to USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913).
+   */
+  token?: string;
   /** Sender address (signer of the authorization) */
   from: string;
   /** Recipient address */
   to: string;
-  /** Amount in USDC atomic units (6 decimals), as decimal string */
+  /** Amount in token atomic units (6 decimals), as decimal string */
   value: string;
   /** Unix timestamp after which the authorization is valid */
   validAfter: string;

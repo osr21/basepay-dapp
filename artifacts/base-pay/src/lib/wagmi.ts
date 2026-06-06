@@ -85,8 +85,45 @@ export const config = createConfig({
   },
 });
 
-// ── USDC on Base ────────────────────────────────────────────────────────────
-export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
+// ── EIP-3009–compatible gasless tokens on Base ───────────────────────────────
+// Only Circle FiatToken V2.2 contracts are listed — they share the same
+// transferWithAuthorization + authorizationState ABI and EIP-712 signing format.
+export type GaslessToken = {
+  address:    `0x${string}`;
+  symbol:     string;
+  /** EIP-712 domain `name` field — must match what the contract returns */
+  domainName: string;
+  /** EIP-712 domain `version` field */
+  domainVersion: string;
+  decimals:   number;
+  flag:       string;  // currency flag emoji for display
+};
+
+export const GASLESS_TOKENS: GaslessToken[] = [
+  {
+    address:       "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    symbol:        "USDC",
+    domainName:    "USD Coin",
+    domainVersion: "2",
+    decimals:      6,
+    flag:          "🇺🇸",
+  },
+  {
+    address:       "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
+    symbol:        "EURC",
+    domainName:    "EURC",
+    domainVersion: "2",
+    decimals:      6,
+    flag:          "🇪🇺",
+  },
+];
+
+export const GASLESS_TOKEN_MAP = new Map<string, GaslessToken>(
+  GASLESS_TOKENS.map(t => [t.address.toLowerCase(), t]),
+);
+
+// ── USDC on Base (kept for non-gasless usage: Send, Batch, Escrow, etc.) ────
+export const USDC_ADDRESS = GASLESS_TOKENS[0].address;
 export const USDC_DECIMALS = 6;
 
 export const USDC_ABI = [

@@ -161,9 +161,10 @@ export const GetGaslessFeeResponse = zod.object({
  * @summary Submit a gasless USDC transfer via EIP-3009
  */
 export const SubmitGaslessTransferBody = zod.object({
+  "token": zod.string().optional().describe('Token contract address (0x-prefixed). Must be in the relay whitelist. Defaults to USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913).\n'),
   "from": zod.string().describe('Sender address (signer of the authorization)'),
   "to": zod.string().describe('Recipient address'),
-  "value": zod.string().describe('Amount in USDC atomic units (6 decimals), as decimal string'),
+  "value": zod.string().describe('Amount in token atomic units (6 decimals), as decimal string'),
   "validAfter": zod.string().describe('Unix timestamp after which the authorization is valid'),
   "validBefore": zod.string().describe('Unix timestamp before which the authorization expires'),
   "nonce": zod.string().describe('Random bytes32 nonce as hex string (0x-prefixed)'),
@@ -174,9 +175,10 @@ export const SubmitGaslessTransferBody = zod.object({
 
 export const SubmitGaslessTransferResponse = zod.object({
   "txHash": zod.string().describe('On-chain transaction hash of the relayed transfer'),
+  "token": zod.string().describe('Token contract address that was transferred'),
   "from": zod.string(),
   "to": zod.string(),
-  "value": zod.string().describe('USDC amount transferred in atomic units')
+  "value": zod.string().describe('Amount transferred in atomic units')
 })
 
 

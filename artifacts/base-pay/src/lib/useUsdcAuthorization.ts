@@ -1,13 +1,6 @@
 import { useSignTypedData } from "wagmi";
 import { parseSignature } from "viem";
-import { USDC_ADDRESS } from "./wagmi";
-
-const USDC_DOMAIN = {
-  name: "USD Coin",
-  version: "2",
-  chainId: 8453,
-  verifyingContract: USDC_ADDRESS,
-} as const;
+import { type GaslessToken } from "./wagmi";
 
 const TRANSFER_TYPES = {
   TransferWithAuthorization: [
@@ -36,12 +29,16 @@ function randomBytes32(): `0x${string}` {
 }
 
 /**
- * Signs a USDC EIP-3009 TransferWithAuthorization — an off-chain typed message.
- * The relayer (API server) submits the tx; user pays zero gas.
+ * Signs an EIP-3009 TransferWithAuthorization for any Circle FiatToken V2.2
+ * (USDC, EURC, etc.). The relayer submits the tx; user pays zero gas.
  *
- * @param validForSecs  How long the authorization stays valid (default: 30 minutes)
+ * @param token        Token config from GASLESS_TOKENS (supplies EIP-712 domain)
+ * @param validForSecs How long the authorization stays valid (default: 30 minutes)
  */
-export function useUsdcAuthorization(owner: `0x${string}` | undefined) {
+export function useUsdcAuthorization(
+  owner: `0x${string}` | undefined,
+  token: GaslessToken,
+) {
   const { signTypedDataAsync } = useSignTypedData();
 
   async function signAuthorization(
@@ -56,8 +53,15 @@ export function useUsdcAuthorization(owner: `0x${string}` | undefined) {
     const validAfter  = 0n;
     const validBefore = now + BigInt(validForSecs);
 
+    const domain = {
+      name:              token.domainName,
+      version:           token.domainVersion,
+      chainId:           8453,
+      verifyingContract: token.address,
+    } as const;
+
     const sig = await signTypedDataAsync({
-      domain:      USDC_DOMAIN,
+      domain,
       types:       TRANSFER_TYPES,
       primaryType: "TransferWithAuthorization",
       message:     {

@@ -457,6 +457,11 @@ components:
       type: object
       required: [from, to, value, validAfter, validBefore, nonce, v, r, s]
       properties:
+        token:
+          type: string
+          description: >
+            Token contract address (0x-prefixed). Must be in the relay whitelist.
+            Defaults to USDC (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913).
         from:
           type: string
           description: Sender address (signer of the authorization)
@@ -465,7 +470,7 @@ components:
           description: Recipient address
         value:
           type: string
-          description: Amount in USDC atomic units (6 decimals), as decimal string
+          description: Amount in token atomic units (6 decimals), as decimal string
         validAfter:
           type: string
           description: Unix timestamp after which the authorization is valid
@@ -487,18 +492,21 @@ components:
 
     GaslessTransferResult:
       type: object
-      required: [txHash, from, to, value]
+      required: [txHash, from, to, value, token]
       properties:
         txHash:
           type: string
           description: On-chain transaction hash of the relayed transfer
+        token:
+          type: string
+          description: Token contract address that was transferred
         from:
           type: string
         to:
           type: string
         value:
           type: string
-          description: USDC amount transferred in atomic units
+          description: Amount transferred in atomic units
 
     ErrorResponse:
       type: object

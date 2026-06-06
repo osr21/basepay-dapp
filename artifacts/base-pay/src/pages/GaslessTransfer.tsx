@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useAccount, usePublicClient } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
-import { isAddress } from "viem";
+import { isAddress, parseUnits } from "viem";
 import { useGetGaslessFee, useSubmitGaslessTransfer } from "@workspace/api-client-react";
 import { useListContacts } from "@workspace/api-client-react";
-import { parseUSDC, truncateAddress } from "@/lib/wagmi";
+import { GASLESS_TOKENS, truncateAddress, type GaslessToken } from "@/lib/wagmi";
 import { useUsdcAuthorization } from "@/lib/useUsdcAuthorization";
 import { useBasenameResolve } from "@/lib/useBasename";
 import { WalletButton } from "@/components/Layout";
@@ -16,11 +16,13 @@ export default function GaslessTransferPage() {
   const { address, isConnected, connector } = useAccount();
   const publicClient = usePublicClient();
 
+  // Token selection — default to USDC
+  const [selectedToken, setSelectedToken] = useState<GaslessToken>(GASLESS_TOKENS[0]);
+
   // Detect smart contract wallets — EIP-3009 requires an EOA signature (ecrecover),
   // so smart wallets (Coinbase Smart Wallet, Safe, etc.) are incompatible.
   //
   // Injected wallets (MetaMask, Brave, etc.) are always EOAs — skip the RPC call.
-  // Only SDK-based connectors (coinbaseWalletSDK, WalletConnect, etc.) may be contracts.
   const isInjected = connector?.id === "injected";
   const { data: bytecode } = useQuery({
     queryKey: ["walletBytecode", address],
@@ -30,12 +32,12 @@ export default function GaslessTransferPage() {
   });
   const isSmartWallet = !isInjected && !!bytecode && bytecode !== "0x";
 
-  const [to,       setTo]       = useState("");
-  const [amount,   setAmount]   = useState("");
+  const [to,           setTo]           = useState("");
+  const [amount,       setAmount]       = useState("");
   const [showContacts, setShowContacts] = useState(false);
-  const [step,     setStep]     = useState<Step>("idle");
-  const [txHash,   setTxHash]   = useState<string | undefined>();
-  const [error,    setError]    = useState<string | undefined>();
+  const [step,         setStep]         = useState<Step>("idle");
+  const [txHash,       setTxHash]       = useState<string | undefined>();
+  const [error,        setError]        = useState<string | undefined>();
 
   const { data: feeInfo }  = useGetGaslessFee();
   const { data: contacts } = useListContacts(
@@ -43,8 +45,8 @@ export default function GaslessTransferPage() {
     { query: { enabled: !!address, queryKey: ["listContacts", address] } },
   );
 
-  const { signAuthorization }           = useUsdcAuthorization(address as `0x${string}` | undefined);
-  const { mutateAsync: relayTransfer }  = useSubmitGaslessTransfer();
+  const { signAuthorization }          = useUsdcAuthorization(address as `0x${string}` | undefined, selectedToken);
+  const { mutateAsync: relayTransfer } = useSubmitGaslessTransfer();
 
   // ── Basenames forward resolution ────────────────────────────────────────────
   const {
@@ -72,7 +74,7 @@ export default function GaslessTransferPage() {
     try {
       // 1. Sign off-chain — no gas, no wallet popup with "transaction"
       setStep("signing");
-      const value = parseUSDC(amount);
+      const value = parseUnits(amount, selectedToken.decimals);
       const { v, r, s, nonce, validAfter, validBefore } = await signAuthorization(
         effectiveTo as `0x${string}`,
         value,
@@ -82,6 +84,7 @@ export default function GaslessTransferPage() {
       setStep("relaying");
       const result = await relayTransfer({
         data: {
+          token:       selectedToken.address,
           from:        address,
           to:          effectiveTo,
           value:       value.toString(),
@@ -114,7 +117,7 @@ export default function GaslessTransferPage() {
   if (!isConnected) {
     return (
       <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[50vh] text-center">
-        <p className="text-muted-foreground mb-4">Connect your wallet to send gasless USDC</p>
+        <p className="text-muted-foreground mb-4">Connect your wallet to send gasless stablecoins</p>
         <WalletButton />
       </div>
     );
@@ -172,14 +175,15 @@ export default function GaslessTransferPage() {
             </svg>
           </div>
           <h2 className="text-xl font-bold mb-1">Transfer Sent</h2>
-          <p className="text-muted-foreground text-sm mb-1">{humanVal} USDC to</p>
+          <p className="text-muted-foreground text-sm mb-1">
+            {humanVal} {selectedToken.symbol} to
+          </p>
           <WalletName address={to} showAvatar={true} avatarSize={20} className="text-sm mb-2 justify-center" />
 
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-xs text-green-400 font-medium mb-4">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
             Zero gas paid — relayed by BasePay
           </div>
-
 
           {txHash && (
             <a
@@ -212,7 +216,7 @@ export default function GaslessTransferPage() {
           <h1 className="text-xl font-bold">Gasless Transfer</h1>
           <span className="px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-xs text-green-400 font-semibold">Zero ETH</span>
         </div>
-        <p className="text-sm text-muted-foreground">Send USDC with only a wallet signature — no gas, ever</p>
+        <p className="text-sm text-muted-foreground">Send stablecoins with only a wallet signature — no gas, ever</p>
       </div>
 
       {/* How it works */}
@@ -263,7 +267,7 @@ export default function GaslessTransferPage() {
           </div>
           <p className="text-muted-foreground leading-relaxed">
             Your connected wallet is a <strong className="text-orange-400">smart contract account</strong>.
-            USDC's gasless transfer method (<code className="text-xs">transferWithAuthorization</code>) uses{" "}
+            The gasless transfer method (<code className="text-xs">transferWithAuthorization</code>) uses{" "}
             <code className="text-xs">ecrecover</code> on-chain, which only works with standard EOA signatures —
             not smart wallet or Passkey signatures.
           </p>
@@ -275,6 +279,32 @@ export default function GaslessTransferPage() {
       )}
 
       <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
+        {/* Token selector */}
+        <div>
+          <label className="text-sm font-medium block mb-2">Token</label>
+          <div className="grid grid-cols-2 gap-2">
+            {GASLESS_TOKENS.map((token) => (
+              <button
+                key={token.address}
+                onClick={() => setSelectedToken(token)}
+                className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                  selectedToken.address === token.address
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border bg-secondary text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                <span className="text-base leading-none">{token.flag}</span>
+                <span className="font-semibold">{token.symbol}</span>
+                {selectedToken.address === token.address && (
+                  <svg className="ml-auto" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="hsl(221,83%,63%)" strokeWidth="2.5">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Recipient */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
@@ -342,9 +372,11 @@ export default function GaslessTransferPage() {
               min="0"
               step="0.01"
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full px-3.5 py-2.5 pr-16 rounded-lg border border-border bg-secondary text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-all"
+              className="w-full px-3.5 py-2.5 pr-20 rounded-lg border border-border bg-secondary text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-all"
             />
-            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">USDC</span>
+            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">
+              {selectedToken.flag} {selectedToken.symbol}
+            </span>
           </div>
         </div>
 
@@ -353,7 +385,7 @@ export default function GaslessTransferPage() {
           <div className="rounded-lg bg-secondary border border-border px-3.5 py-3 text-xs space-y-1.5">
             <div className="flex justify-between text-muted-foreground">
               <span>Amount</span>
-              <span>{amount} USDC</span>
+              <span>{amount} {selectedToken.symbol}</span>
             </div>
             <div className="flex justify-between text-green-400">
               <span>Relay fee</span>
@@ -361,7 +393,7 @@ export default function GaslessTransferPage() {
             </div>
             <div className="flex justify-between font-semibold text-foreground border-t border-border pt-1.5">
               <span>Recipient gets</span>
-              <span>{amount} USDC</span>
+              <span>{amount} {selectedToken.symbol}</span>
             </div>
             <div className="flex justify-between text-muted-foreground/60">
               <span>Gas cost to you</span>
@@ -406,7 +438,7 @@ export default function GaslessTransferPage() {
               : "bg-secondary text-muted-foreground cursor-not-allowed"
           }`}
         >
-          {isSmartWallet ? "Not available for smart wallets" : "Sign & Send Gasless"}
+          {isSmartWallet ? "Not available for smart wallets" : `Sign & Send ${selectedToken.symbol} Gasless`}
         </button>
         <p className="text-center text-xs text-muted-foreground">
           1 signature · 0 ETH · 0 approvals

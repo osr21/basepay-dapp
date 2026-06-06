@@ -453,6 +453,23 @@ router.post("/swap/execute", async (req, res) => {
   }
 
   // ── TX 4: swap via Aerodrome ──────────────────────────────────────────────
+  // Re-fetch the quote immediately before the swap so amountOutMin reflects the
+  // current pool state rather than the one sampled at the start of the handler
+  // (TX1 + TX2 + retries can take 10–20 s; pool rate may shift slightly).
+  let swapAmountOutMin = amountOutMin;
+  try {
+    const preSwapQuote = await getBestAerodromeQuote(pair.tokenIn, pair.tokenOut, amountBig);
+    if (preSwapQuote) {
+      swapAmountOutMin = (preSwapQuote.amountOut * (10_000n - slipBps)) / 10_000n;
+    }
+    req.log.info(
+      { original: amountOutMin.toString(), fresh: swapAmountOutMin.toString() },
+      "pre-swap quote refresh",
+    );
+  } catch (qErr) {
+    req.log.warn({ qErr }, "pre-swap quote refresh failed — using original amountOutMin");
+  }
+
   const routes = [{ from: pair.tokenIn, to: pair.tokenOut, stable: poolStable, factory: AERODROME_FACTORY }];
   let swapHash: Hex;
   try {
@@ -463,22 +480,45 @@ router.post("/swap/execute", async (req, res) => {
         address:      AERODROME_ROUTER,
         abi:          AERODROME_ROUTER_ABI,
         functionName: "swapExactTokensForTokens" as const,
-        args:         [amountBig, amountOutMin, routes, relayer.account.address, deadlineBig] as const,
+        args:         [amountBig, swapAmountOutMin, routes, relayer.account.address, deadlineBig] as const,
       }),
       "TX4 swap",
     );
     await publicClient.waitForTransactionReceipt({ hash: swapHash, confirmations: 1 });
   } catch (err) {
+    // TX2 already transferred the user's tokens to the relayer; refund them.
+    req.log.error({ err, permitHash, pullHash }, "swap Aerodrome swap tx failed — attempting refund");
+    try {
+      const refundHash = await writeWithRetry(
+        () => relayer.client.writeContract({
+          chain:        base,
+          account:      relayer.account,
+          address:      pair.tokenIn,
+          abi:          ERC20_ABI,
+          functionName: "transfer",
+          args:         [owner as `0x${string}`, amountBig],
+        }),
+        "TX4-recovery refund",
+      );
+      req.log.info({ refundHash, owner, amountIn }, "refunded user after swap failure");
+      return res.status(500).json({
+        error:      "Swap reverted — your tokens have been refunded.",
+        refundHash,
+        permitHash,
+        pullHash,
+      });
+    } catch (refundErr) {
+      req.log.error({ refundErr, owner, amountIn }, "refund also failed — tokens stuck with relayer");
+    }
     const raw   = err instanceof Error ? err.message : "Swap failed";
     const match = raw.match(/reverted with the following reason:\s*\n(.+)/m) ?? raw.match(/Error: (.+?)(?:\n|$)/);
     const msg   = (match ? match[1].trim() : raw).slice(0, 150);
-    req.log.error({ err, permitHash, pullHash }, "swap Aerodrome swap tx failed");
-    return res.status(500).json({ error: msg, permitHash, pullHash });
+    return res.status(500).json({ error: `Swap reverted: ${msg}. Contact support — tokens may be held by relayer.`, permitHash, pullHash });
   }
 
-  // ── Final TX: send (amountOutMin − protocol fee) to user ─────────────────
-  // Using amountOutMin (worst-case) ensures the relayer always holds enough.
-  const userAmount = (amountOutMin * (10_000n - SWAP_FEE_BPS)) / 10_000n;
+  // ── Final TX: send (swapAmountOutMin − protocol fee) to user ────────────
+  // Using swapAmountOutMin (worst-case fresh quote) ensures the relayer holds enough.
+  const userAmount = (swapAmountOutMin * (10_000n - SWAP_FEE_BPS)) / 10_000n;
   let transferHash: Hex;
   try {
     transferHash = await writeWithRetry(

@@ -51,14 +51,14 @@ export default function SwapPage() {
   const [error,          setError]          = useState<string | undefined>();
 
   // ── Balances ────────────────────────────────────────────────────────────────
-  const { data: fromBalRaw } = useReadContract({
+  const { data: fromBalRaw, refetch: refetchFromBal } = useReadContract({
     address:      fromToken.address,
     abi:          BALANCE_ABI,
     functionName: "balanceOf",
     args:         address ? [address] : undefined,
     query:        { enabled: !!address, refetchInterval: 15_000 },
   });
-  const { data: toBalRaw } = useReadContract({
+  const { data: toBalRaw, refetch: refetchToBal } = useReadContract({
     address:      toToken.address,
     abi:          BALANCE_ABI,
     functionName: "balanceOf",
@@ -144,6 +144,9 @@ export default function SwapPage() {
       setTxHash(result.txHash);
       setReceivedAmount(result.amountOutAfterFee);
       setStep("done");
+      // Force-refresh balances immediately so the UI reflects the swap outcome.
+      void refetchFromBal();
+      void refetchToBal();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (!msg.toLowerCase().includes("rejected") && !msg.toLowerCase().includes("denied")) {

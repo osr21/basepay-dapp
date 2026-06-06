@@ -7,11 +7,15 @@
  */
 
 export interface SwapResult {
-  /** On-chain transaction hash of the relayed swap */
+  /** On-chain hash of the swap transaction (permit + exactInputSingle) */
   txHash: string;
+  /** On-chain hash of the relayer→user output token transfer */
+  transferHash: string;
   tokenIn: string;
   tokenOut: string;
   amountIn: string;
-  /** Minimum output enforced on-chain */
+  /** Minimum output enforced on-chain (before protocol fee) */
   amountOutMin: string;
+  /** Net amount transferred to the user after 0.30% protocol fee */
+  amountOutAfterFee: string;
 }

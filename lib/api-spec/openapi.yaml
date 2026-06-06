@@ -584,17 +584,26 @@ components:
 
     SwapQuoteResult:
       type: object
-      required: [amountOut, amountOutMin, fee]
+      required: [amountOut, amountOutMin, fee, protocolFeeBps, protocolFeeAmount, amountOutAfterFee]
       properties:
         amountOut:
           type: string
-          description: Expected output amount in atomic units
+          description: Expected gross output amount in atomic units (before protocol fee)
         amountOutMin:
           type: string
-          description: Minimum output amount after 1% slippage guard
+          description: Minimum output amount after 1% slippage guard (before protocol fee)
         fee:
           type: integer
           description: Uniswap V3 pool fee tier (e.g. 500 = 0.05%)
+        protocolFeeBps:
+          type: integer
+          description: BasePay protocol fee in basis points (e.g. 30 = 0.30%)
+        protocolFeeAmount:
+          type: string
+          description: Protocol fee amount in atomic units deducted from amountOut
+        amountOutAfterFee:
+          type: string
+          description: Net output amount the user receives after protocol fee
 
     SwapInput:
       type: object
@@ -630,11 +639,14 @@ components:
 
     SwapResult:
       type: object
-      required: [txHash, tokenIn, tokenOut, amountIn, amountOutMin]
+      required: [txHash, transferHash, tokenIn, tokenOut, amountIn, amountOutMin, amountOutAfterFee]
       properties:
         txHash:
           type: string
-          description: On-chain transaction hash of the relayed swap
+          description: On-chain hash of the swap transaction (permit + exactInputSingle)
+        transferHash:
+          type: string
+          description: On-chain hash of the relayer→user output token transfer
         tokenIn:
           type: string
         tokenOut:
@@ -643,7 +655,10 @@ components:
           type: string
         amountOutMin:
           type: string
-          description: Minimum output enforced on-chain
+          description: Minimum output enforced on-chain (before protocol fee)
+        amountOutAfterFee:
+          type: string
+          description: Net amount transferred to the user after 0.30% protocol fee
 
     ErrorResponse:
       type: object

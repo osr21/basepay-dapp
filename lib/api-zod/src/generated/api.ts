@@ -156,9 +156,12 @@ export const GetSwapQuoteQueryParams = zod.object({
 })
 
 export const GetSwapQuoteResponse = zod.object({
-  "amountOut": zod.string().describe('Expected output amount in atomic units'),
-  "amountOutMin": zod.string().describe('Minimum output amount after 1% slippage guard'),
-  "fee": zod.number().describe('Uniswap V3 pool fee tier (e.g. 500 = 0.05%)')
+  "amountOut": zod.string().describe('Expected gross output amount in atomic units (before protocol fee)'),
+  "amountOutMin": zod.string().describe('Minimum output amount after 1% slippage guard (before protocol fee)'),
+  "fee": zod.number().describe('Uniswap V3 pool fee tier (e.g. 500 = 0.05%)'),
+  "protocolFeeBps": zod.number().describe('BasePay protocol fee in basis points (e.g. 30 = 0.30%)'),
+  "protocolFeeAmount": zod.string().describe('Protocol fee amount in atomic units deducted from amountOut'),
+  "amountOutAfterFee": zod.string().describe('Net output amount the user receives after protocol fee')
 })
 
 
@@ -178,11 +181,13 @@ export const ExecuteGaslessSwapBody = zod.object({
 })
 
 export const ExecuteGaslessSwapResponse = zod.object({
-  "txHash": zod.string().describe('On-chain transaction hash of the relayed swap'),
+  "txHash": zod.string().describe('On-chain hash of the swap transaction (permit + exactInputSingle)'),
+  "transferHash": zod.string().describe('On-chain hash of the relayer→user output token transfer'),
   "tokenIn": zod.string(),
   "tokenOut": zod.string(),
   "amountIn": zod.string(),
-  "amountOutMin": zod.string().describe('Minimum output enforced on-chain')
+  "amountOutMin": zod.string().describe('Minimum output enforced on-chain (before protocol fee)'),
+  "amountOutAfterFee": zod.string().describe('Net amount transferred to the user after 0.30% protocol fee')
 })
 
 

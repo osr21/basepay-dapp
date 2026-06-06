@@ -24,7 +24,7 @@ const DATA_SUFFIX: Hex | undefined = _builderCode
 const router = Router();
 
 // ── Chain clients ─────────────────────────────────────────────────────────────
-const transport   = http("https://mainnet.base.org");
+const transport    = http("https://mainnet.base.org");
 const publicClient = createPublicClient({ chain: base, transport });
 
 type Relayer = { client: ReturnType<typeof createWalletClient>; account: ReturnType<typeof privateKeyToAccount> };
@@ -42,11 +42,15 @@ function getRelayer(): Relayer {
 
 // ── Uniswap V3 constants on Base ──────────────────────────────────────────────
 // SwapRouter02: supports selfPermit so we can permit+swap in one multicall tx
-const SWAP_ROUTER   = "0x2626664c2603336E57B271c5C0b26F421741e481" as const;
+const SWAP_ROUTER  = "0x2626664c2603336E57B271c5C0b26F421741e481" as const;
 // QuoterV2: read-only quote for exactInputSingle
-const QUOTER_V2     = "0x3d4e44Eb1374240CE5F1B136cf68A4f7f823aE3A" as const;
+const QUOTER_V2    = "0x3d4e44Eb1374240CE5F1B136cf68A4f7f823aE3A" as const;
 // Best USDC/EURC pool: fee tier 500 (0.05%), verified ~$3.75M liquidity
-const POOL_FEE      = 500;
+const POOL_FEE     = 500;
+
+// ── Protocol fee ──────────────────────────────────────────────────────────────
+// 0.30% on the output amount; relayer keeps this in its wallet.
+const SWAP_FEE_BPS = 30n;
 
 // ── Token whitelist (only these two directions are supported) ─────────────────
 const USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" as const;
@@ -63,10 +67,11 @@ function resolveTokens(tokenIn: string, tokenOut: string): TokenPair | null {
 }
 
 // ── ABIs ──────────────────────────────────────────────────────────────────────
-const ERC20_PERMIT_ABI = parseAbi([
+const ERC20_ABI = parseAbi([
   "function nonces(address owner) external view returns (uint256)",
   "function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external",
   "function balanceOf(address) external view returns (uint256)",
+  "function transfer(address to, uint256 amount) external returns (bool)",
 ]);
 
 const QUOTER_ABI = parseAbi([
@@ -92,11 +97,9 @@ const SwapSchema = z.object({
   amountIn:    z.string().regex(/^\d{1,13}$/, "amountIn must be 1–13 digit integer string"),
   owner:       z.string().refine(isAddress, "invalid owner address"),
   deadline:    z.string().regex(/^\d{1,12}$/, "deadline must be unix timestamp"),
-  // EIP-2612 permit signature components
   permitV:     z.number().int().min(27).max(28),
   permitR:     z.string().refine((v: string) => isHex(v) && v.length === 66, "permitR must be 0x-prefixed 32-byte hex"),
   permitS:     z.string().refine((v: string) => isHex(v) && v.length === 66, "permitS must be 0x-prefixed 32-byte hex"),
-  // Max acceptable slippage (bps, optional, capped at 100)
   slippageBps: z.number().int().min(0).max(100).optional(),
 });
 
@@ -129,22 +132,29 @@ router.get("/swap/quote", async (req, res) => {
       abi:          QUOTER_ABI,
       functionName: "quoteExactInputSingle",
       args: [{
-        tokenIn:          pair.tokenIn,
-        tokenOut:         pair.tokenOut,
-        amountIn:         amountBig,
-        fee:              POOL_FEE,
+        tokenIn:           pair.tokenIn,
+        tokenOut:          pair.tokenOut,
+        amountIn:          amountBig,
+        fee:               POOL_FEE,
         sqrtPriceLimitX96: 0n,
       }],
     });
     const amountOut = (quoteResult as readonly [bigint, ...unknown[]])[0];
 
-    const slippageFactor = (10_000n - MAX_SLIPPAGE_BPS);
-    const amountOutMin   = (amountOut * slippageFactor) / 10_000n;
+    const slippageFactor   = (10_000n - MAX_SLIPPAGE_BPS);
+    const amountOutMin     = (amountOut * slippageFactor) / 10_000n;
+
+    // Protocol fee applied to the output received by the user
+    const protocolFeeAmount  = (amountOut * SWAP_FEE_BPS) / 10_000n;
+    const amountOutAfterFee  = amountOut - protocolFeeAmount;
 
     return res.json({
-      amountOut:    amountOut.toString(),
-      amountOutMin: amountOutMin.toString(),
-      fee:          POOL_FEE,
+      amountOut:          amountOut.toString(),
+      amountOutMin:       amountOutMin.toString(),
+      fee:                POOL_FEE,
+      protocolFeeBps:     Number(SWAP_FEE_BPS),
+      protocolFeeAmount:  protocolFeeAmount.toString(),
+      amountOutAfterFee:  amountOutAfterFee.toString(),
     });
   } catch (err) {
     req.log.warn({ err }, "swap quote failed");
@@ -179,7 +189,7 @@ router.post("/swap/execute", async (req, res) => {
   // Check sender balance
   const balance = await publicClient.readContract({
     address:      pair.tokenIn,
-    abi:          ERC20_PERMIT_ABI,
+    abi:          ERC20_ABI,
     functionName: "balanceOf",
     args:         [owner as `0x${string}`],
   });
@@ -214,7 +224,8 @@ router.post("/swap/execute", async (req, res) => {
     return res.status(500).json({ error: "Relayer not configured" });
   }
 
-  // Build multicall: selfPermit + exactInputSingle
+  // ── TX 1: selfPermit + exactInputSingle → output goes to relayer ─────────
+  // The relayer holds the output tokens and distributes user's share in TX 2.
   const permitCalldata = encodeFunctionData({
     abi:          ROUTER_ABI,
     functionName: "selfPermit",
@@ -228,7 +239,7 @@ router.post("/swap/execute", async (req, res) => {
       tokenIn:           pair.tokenIn,
       tokenOut:          pair.tokenOut,
       fee:               POOL_FEE,
-      recipient:         owner as `0x${string}`,
+      recipient:         relayer.account.address, // relayer receives output; distributes after fee
       amountIn:          amountBig,
       amountOutMinimum:  amountOutMin,
       sqrtPriceLimitX96: 0n,
@@ -243,26 +254,74 @@ router.post("/swap/execute", async (req, res) => {
 
   const finalData: Hex = DATA_SUFFIX ? concat([multicallData, DATA_SUFFIX]) : multicallData;
 
-  let txHash: Hex;
+  let swapHash: Hex;
   try {
-    txHash = await relayer.client.sendTransaction({
+    swapHash = await relayer.client.sendTransaction({
       chain:   base,
       account: relayer.account,
       to:      SWAP_ROUTER,
       data:    finalData,
     });
   } catch (err: unknown) {
-    const raw = err instanceof Error ? err.message : "Swap failed";
+    const raw   = err instanceof Error ? err.message : "Swap failed";
     const match =
       raw.match(/reverted with the following reason:\s*\n(.+)/m)
       ?? raw.match(/Error: (.+?)(?:\n|$)/);
     const msg = (match ? match[1].trim() : raw).slice(0, 120);
-    req.log.error({ err }, "gasless swap failed");
+    req.log.error({ err }, "gasless swap tx1 failed");
     return res.status(500).json({ error: msg });
   }
 
-  req.log.info({ txHash, owner, tokenIn: pair.tokenIn, tokenOut: pair.tokenOut, amountIn }, "gasless swap relayed");
-  return res.json({ txHash, tokenIn: pair.tokenIn, tokenOut: pair.tokenOut, amountIn, amountOutMin: amountOutMin.toString() });
+  // Wait for swap to confirm before distributing output
+  try {
+    await publicClient.waitForTransactionReceipt({ hash: swapHash, confirmations: 1 });
+  } catch (err) {
+    req.log.error({ err, swapHash }, "swap receipt timeout — manual recovery may be needed");
+    return res.status(500).json({ error: "Swap submitted but confirmation timed out. Check BaseScan.", txHash: swapHash });
+  }
+
+  // ── TX 2: transfer (amountOutMin − protocol fee) to the user ─────────────
+  // Using amountOutMin (worst-case actual output) ensures the relayer always
+  // holds enough tokens. Any positive slippage accrues to the relayer.
+  const userAmount = (amountOutMin * (10_000n - SWAP_FEE_BPS)) / 10_000n;
+
+  let transferHash: Hex;
+  try {
+    transferHash = await relayer.client.writeContract({
+      chain:        base,
+      account:      relayer.account,
+      address:      pair.tokenOut,
+      abi:          ERC20_ABI,
+      functionName: "transfer",
+      args:         [owner as `0x${string}`, userAmount],
+    });
+  } catch (err: unknown) {
+    // Swap succeeded but transfer failed — relayer holds the output tokens.
+    // Log full details for manual recovery.
+    req.log.error(
+      { err, swapHash, owner, tokenOut: pair.tokenOut, userAmount: userAmount.toString() },
+      "gasless swap tx2 (user transfer) failed — manual recovery needed"
+    );
+    return res.status(500).json({
+      error: "Swap executed but output transfer failed. Contact support with swapHash.",
+      swapHash,
+    });
+  }
+
+  req.log.info(
+    { swapHash, transferHash, owner, tokenIn: pair.tokenIn, tokenOut: pair.tokenOut, amountIn, userAmount: userAmount.toString() },
+    "gasless swap completed"
+  );
+
+  return res.json({
+    txHash:          swapHash,
+    transferHash,
+    tokenIn:         pair.tokenIn,
+    tokenOut:        pair.tokenOut,
+    amountIn,
+    amountOutMin:    amountOutMin.toString(),
+    amountOutAfterFee: userAmount.toString(),
+  });
 });
 
 export default router;

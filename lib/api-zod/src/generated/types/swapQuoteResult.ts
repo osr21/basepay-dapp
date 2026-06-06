@@ -7,10 +7,16 @@
  */
 
 export interface SwapQuoteResult {
-  /** Expected output amount in atomic units */
+  /** Expected gross output amount in atomic units (before protocol fee) */
   amountOut: string;
-  /** Minimum output amount after 1% slippage guard */
+  /** Minimum output amount after 1% slippage guard (before protocol fee) */
   amountOutMin: string;
   /** Uniswap V3 pool fee tier (e.g. 500 = 0.05%) */
   fee: number;
+  /** BasePay protocol fee in basis points (e.g. 30 = 0.30%) */
+  protocolFeeBps: number;
+  /** Protocol fee amount in atomic units deducted from amountOut */
+  protocolFeeAmount: string;
+  /** Net output amount the user receives after protocol fee */
+  amountOutAfterFee: string;
 }

@@ -7,7 +7,7 @@ import { GASLESS_TOKENS, type GaslessToken } from "@/lib/wagmi";
 import { useTokenPermit } from "@/lib/useTokenPermit";
 import { WalletButton } from "@/components/Layout";
 
-// Uniswap V3 SwapRouter02 on Base — recipient of the EIP-2612 permit allowance
+// Uniswap V3 SwapRouter02 on Base — permit spender (selfPermit in multicall)
 const SWAP_ROUTER = "0x2626664c2603336E57B271c5C0b26F421741e481" as const;
 
 type Step = "idle" | "signing" | "swapping" | "done";
@@ -34,9 +34,10 @@ export default function SwapPage() {
   const toToken:   GaslessToken = GASLESS_TOKENS[1 - fromIdx];
 
   const [amount, setAmount] = useState("");
-  const [step,   setStep]   = useState<Step>("idle");
-  const [txHash, setTxHash] = useState<string | undefined>();
-  const [error,  setError]  = useState<string | undefined>();
+  const [step,           setStep]           = useState<Step>("idle");
+  const [txHash,         setTxHash]         = useState<string | undefined>();
+  const [receivedAmount, setReceivedAmount] = useState<string | undefined>();
+  const [error,          setError]          = useState<string | undefined>();
 
   // ── Balances ────────────────────────────────────────────────────────────────
   const { data: fromBalRaw } = useReadContract({
@@ -128,6 +129,7 @@ export default function SwapPage() {
       });
 
       setTxHash(result.txHash);
+      setReceivedAmount(result.amountOutAfterFee);
       setStep("done");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -139,7 +141,7 @@ export default function SwapPage() {
   }
 
   function handleReset() {
-    setAmount(""); setStep("idle"); setTxHash(undefined); setError(undefined);
+    setAmount(""); setStep("idle"); setTxHash(undefined); setReceivedAmount(undefined); setError(undefined);
   }
 
   function handleFlip() {
@@ -198,8 +200,10 @@ export default function SwapPage() {
   }
 
   // ── Success ────────────────────────────────────────────────────────────────
-  if (step === "done" && quote) {
-    const outFormatted = parseFloat(formatUnits(BigInt(quote.amountOut), toToken.decimals)).toFixed(4);
+  if (step === "done") {
+    const receivedFormatted = receivedAmount
+      ? parseFloat(formatUnits(BigInt(receivedAmount), toToken.decimals)).toFixed(4)
+      : "—";
     return (
       <div className="max-w-md mx-auto">
         <div className="rounded-2xl border border-green-500/20 bg-green-500/5 p-8 text-center">
@@ -210,7 +214,7 @@ export default function SwapPage() {
           </div>
           <h2 className="text-xl font-bold mb-1">Swap Complete</h2>
           <p className="text-muted-foreground text-sm mb-1">
-            {amount} {fromToken.symbol} → ~{outFormatted} {toToken.symbol}
+            {amount} {fromToken.symbol} → {receivedFormatted} {toToken.symbol}
           </p>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-xs text-green-400 font-medium mb-4">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -240,8 +244,9 @@ export default function SwapPage() {
   }
 
   // ── Swap form ──────────────────────────────────────────────────────────────
+  // Show net amount after protocol fee so user sees exactly what they'll receive
   const outFormatted = quote
-    ? parseFloat(formatUnits(BigInt(quote.amountOut), toToken.decimals)).toFixed(4)
+    ? parseFloat(formatUnits(BigInt(quote.amountOutAfterFee), toToken.decimals)).toFixed(4)
     : null;
 
   return (
@@ -349,7 +354,7 @@ export default function SwapPage() {
         {quote && amountBig && (
           <div className="rounded-lg bg-secondary border border-border px-3.5 py-3 text-xs space-y-1.5">
             <div className="flex justify-between text-muted-foreground">
-              <span>Rate</span>
+              <span>Rate (gross)</span>
               <span>
                 1 {fromToken.symbol} ≈{" "}
                 {(parseFloat(formatUnits(BigInt(quote.amountOut), toToken.decimals)) /
@@ -365,9 +370,15 @@ export default function SwapPage() {
               <span>Slippage tolerance</span>
               <span>0.5%</span>
             </div>
-            <div className="flex justify-between text-green-400">
-              <span>Relay fee</span>
-              <span>Free</span>
+            <div className="flex justify-between text-muted-foreground">
+              <span>Protocol fee</span>
+              <span>
+                0.30% (−{parseFloat(formatUnits(BigInt(quote.protocolFeeAmount), toToken.decimals)).toFixed(4)} {toToken.symbol})
+              </span>
+            </div>
+            <div className="flex justify-between font-semibold text-foreground border-t border-border pt-1.5 mt-0.5">
+              <span>You receive</span>
+              <span className="text-green-400">{outFormatted} {toToken.symbol}</span>
             </div>
             <div className="flex justify-between text-muted-foreground/60">
               <span>Gas cost to you</span>
@@ -422,7 +433,7 @@ export default function SwapPage() {
         </div>
         <div className="flex items-start gap-2">
           <span className="text-green-400 font-bold mt-px">✓</span>
-          <span className="text-green-400">You receive {toToken.symbol} directly in your wallet. Relay fee: <strong>free</strong></span>
+          <span className="text-green-400">You receive {toToken.symbol} directly in your wallet. Gas: <strong>$0</strong>. Protocol fee: <strong>0.30%</strong></span>
         </div>
       </div>
     </div>

@@ -177,12 +177,18 @@ export interface GaslessTransferResult {
 }
 
 export interface SwapQuoteResult {
-  /** Expected output amount in atomic units */
+  /** Expected gross output amount in atomic units (before protocol fee) */
   amountOut: string;
-  /** Minimum output amount after 1% slippage guard */
+  /** Minimum output amount after 1% slippage guard (before protocol fee) */
   amountOutMin: string;
   /** Uniswap V3 pool fee tier (e.g. 500 = 0.05%) */
   fee: number;
+  /** BasePay protocol fee in basis points (e.g. 30 = 0.30%) */
+  protocolFeeBps: number;
+  /** Protocol fee amount in atomic units deducted from amountOut */
+  protocolFeeAmount: string;
+  /** Net output amount the user receives after protocol fee */
+  amountOutAfterFee: string;
 }
 
 export interface SwapInput {
@@ -207,13 +213,17 @@ export interface SwapInput {
 }
 
 export interface SwapResult {
-  /** On-chain transaction hash of the relayed swap */
+  /** On-chain hash of the swap transaction (permit + exactInputSingle) */
   txHash: string;
+  /** On-chain hash of the relayer→user output token transfer */
+  transferHash: string;
   tokenIn: string;
   tokenOut: string;
   amountIn: string;
-  /** Minimum output enforced on-chain */
+  /** Minimum output enforced on-chain (before protocol fee) */
   amountOutMin: string;
+  /** Net amount transferred to the user after 0.30% protocol fee */
+  amountOutAfterFee: string;
 }
 
 export interface ErrorResponse {

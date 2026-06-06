@@ -70,7 +70,20 @@ export function useUsdcAuthorization(owner: `0x${string}` | undefined) {
       },
     });
 
-    const { v, r, s } = parseSignature(sig);
+    let parsed: ReturnType<typeof parseSignature>;
+    try {
+      parsed = parseSignature(sig);
+    } catch {
+      throw new Error(
+        "Your wallet returned an incompatible signature format. " +
+        "EIP-3009 gasless transfers use ecrecover on-chain and require an EOA " +
+        "(externally owned account) signature — smart contract wallets using " +
+        "Passkeys or WebAuthn are not supported. Please reconnect with MetaMask " +
+        "or Coinbase Wallet in standard (non-smart wallet) mode.",
+      );
+    }
+
+    const { v, r, s } = parsed;
     return {
       v: Number(v),
       r: r as `0x${string}`,

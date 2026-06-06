@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
+import { useQuery } from "@tanstack/react-query";
 import { isAddress } from "viem";
 import { useGetGaslessFee, useSubmitGaslessTransfer } from "@workspace/api-client-react";
 import { useListContacts } from "@workspace/api-client-react";
@@ -13,6 +14,17 @@ type Step = "idle" | "signing" | "relaying" | "done";
 
 export default function GaslessTransferPage() {
   const { address, isConnected } = useAccount();
+  const publicClient = usePublicClient();
+
+  // Detect smart contract wallets — EIP-3009 requires an EOA signature (ecrecover),
+  // so smart wallets (Coinbase Smart Wallet, Safe, etc.) are incompatible.
+  const { data: bytecode } = useQuery({
+    queryKey: ["walletBytecode", address],
+    queryFn:  () => publicClient!.getBytecode({ address: address! }),
+    enabled:  !!address && !!publicClient,
+    staleTime: 60_000,
+  });
+  const isSmartWallet = !!bytecode && bytecode !== "0x";
 
   const [to,       setTo]       = useState("");
   const [amount,   setAmount]   = useState("");
@@ -42,7 +54,7 @@ export default function GaslessTransferPage() {
   const isValidAddress = isAddress(effectiveTo);
   const isValidAmount  = parseFloat(amount) > 0;
   const isBusy         = step === "signing" || step === "relaying";
-  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle";
+  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle" && !isSmartWallet;
 
   async function handleSend() {
     if (!canSend || !address) return;
@@ -235,6 +247,29 @@ export default function GaslessTransferPage() {
         </div>
       )}
 
+      {/* Smart wallet incompatibility notice */}
+      {isSmartWallet && (
+        <div className="rounded-xl border border-orange-500/30 bg-orange-500/8 px-4 py-3 space-y-1.5 text-xs">
+          <div className="flex items-center gap-2 font-semibold text-orange-400">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            Smart wallets cannot use EIP-3009 gasless transfers
+          </div>
+          <p className="text-muted-foreground leading-relaxed">
+            Your connected wallet is a <strong className="text-orange-400">smart contract account</strong>.
+            USDC's gasless transfer method (<code className="text-xs">transferWithAuthorization</code>) uses{" "}
+            <code className="text-xs">ecrecover</code> on-chain, which only works with standard EOA signatures —
+            not smart wallet or Passkey signatures.
+          </p>
+          <p className="text-muted-foreground">
+            To use gasless transfers, reconnect with <strong className="text-foreground">MetaMask</strong> or{" "}
+            <strong className="text-foreground">Coinbase Wallet in standard (non-smart wallet) mode</strong>.
+          </p>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-border bg-card p-6 space-y-5">
         {/* Recipient */}
         <div>
@@ -367,7 +402,7 @@ export default function GaslessTransferPage() {
               : "bg-secondary text-muted-foreground cursor-not-allowed"
           }`}
         >
-          Sign & Send Gasless
+          {isSmartWallet ? "Not available for smart wallets" : "Sign & Send Gasless"}
         </button>
         <p className="text-center text-xs text-muted-foreground">
           1 signature · 0 ETH · 0 approvals

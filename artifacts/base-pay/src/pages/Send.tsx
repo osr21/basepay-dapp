@@ -87,7 +87,7 @@ export default function SendPage() {
       address: USDC_ADDRESS,
       abi: USDC_ABI,
       functionName: "transfer",
-      args: [to as `0x${string}`, parseUSDC(net)],
+      args: [effectiveTo as `0x${string}`, parseUSDC(net)],
     });
   }
 

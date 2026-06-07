@@ -66,6 +66,26 @@ router.patch("/payment-requests/:id", async (req, res) => {
   if (!paramsParsed.success || !bodyParsed.success) {
     return res.status(400).json({ error: "Invalid request" });
   }
+
+  // Fetch existing row first so we can enforce state transitions.
+  const [existing] = await db
+    .select()
+    .from(paymentRequestsTable)
+    .where(eq(paymentRequestsTable.id, paramsParsed.data.id));
+  if (!existing) {
+    return res.status(404).json({ error: "Payment request not found" });
+  }
+
+  // Only pending requests may be updated — prevent re-marking or reverting.
+  if (existing.status !== "pending") {
+    return res.status(409).json({ error: "Only pending payment requests can be updated" });
+  }
+
+  // Require a txHash when marking as paid so a plausible on-chain reference is present.
+  if (bodyParsed.data.status === "paid" && !bodyParsed.data.paidTxHash) {
+    return res.status(400).json({ error: "paidTxHash is required when marking a request as paid" });
+  }
+
   const updates: Record<string, unknown> = {};
   if (bodyParsed.data.status)      updates.status     = bodyParsed.data.status;
   if (bodyParsed.data.paidTxHash)  updates.paidTxHash = bodyParsed.data.paidTxHash;

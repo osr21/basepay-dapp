@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAccount, useReadContract, useChainId } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
 import { isAddress, parseUnits, formatUnits } from "viem";
 import { base } from "viem/chains";
 import { useGetGaslessFee, useSubmitGaslessTransfer } from "@workspace/api-client-react";
@@ -13,8 +13,8 @@ import WalletName from "@/components/WalletName";
 type Step = "idle" | "signing" | "relaying" | "done";
 
 export default function GaslessTransferPage() {
-  const { address, isConnected } = useAccount();
-  const chainId = useChainId();
+  const { address, isConnected, chain } = useAccount();
+  const chainId = chain?.id;
 
   // Token selection — default to USDC
   const [selectedToken, setSelectedToken] = useState<GaslessToken>(GASLESS_TOKENS[0]);

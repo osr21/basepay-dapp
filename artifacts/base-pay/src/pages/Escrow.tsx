@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { isAddress, decodeEventLog } from "viem";
 import { base } from "viem/chains";
 import {
@@ -20,8 +20,8 @@ const DURATIONS = [
 ];
 
 export default function EscrowPage() {
-  const { address, isConnected } = useAccount();
-  const chainId = useChainId();
+  const { address, isConnected, chain } = useAccount();
+  const chainId = chain?.id;
   const [payee, setPayee]     = useState("");
   const [amount, setAmount]   = useState("");
   const [ttlIdx, setTtlIdx]   = useState(1);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { isAddress, decodeEventLog } from "viem";
 import { base } from "viem/chains";
 import {
@@ -28,8 +28,8 @@ function subPermitDeadline(): bigint {
 }
 
 export default function SubscriptionsPage() {
-  const { address, isConnected } = useAccount();
-  const chainId = useChainId();
+  const { address, isConnected, chain } = useAccount();
+  const chainId = chain?.id;
   const [payee, setPayee]       = useState("");
   const [amount, setAmount]     = useState("");
   const [intervalIdx, setIntervalIdx] = useState(2);

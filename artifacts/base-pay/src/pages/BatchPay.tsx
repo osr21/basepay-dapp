@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { isAddress } from "viem";
 import { base } from "viem/chains";
 import {
@@ -18,8 +18,8 @@ interface Row { address: string; amount: string; }
 function newRow(): Row { return { address: "", amount: "" }; }
 
 export default function BatchPayPage() {
-  const { address, isConnected } = useAccount();
-  const chainId = useChainId();
+  const { address, isConnected, chain } = useAccount();
+  const chainId = chain?.id;
   const [rows, setRows]     = useState<Row[]>([newRow(), newRow()]);
   const [memo, setMemo]     = useState("");
   const [step, setStep]     = useState<"idle" | "signing" | "sending" | "done">("idle");

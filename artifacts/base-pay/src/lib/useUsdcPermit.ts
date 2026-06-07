@@ -66,7 +66,9 @@ export function useUsdcPermit(owner: `0x${string}` | undefined) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (/chainId.*must match|must match.*chainId/i.test(msg)) {
-        throw new Error("Wrong network — please switch your wallet to Base Mainnet and try again.");
+        const ids = msg.match(/"(\d+)"/g);
+        const hint = ids ? ` (your wallet: chain ${ids[1] ?? "?"}, required: chain ${ids[0] ?? "8453"})` : "";
+        throw new Error(`Wrong network${hint} — in MetaMask, switch to the official Base Mainnet (chain ID 8453). You may need to remove and re-add the network.`);
       }
       throw err;
     }

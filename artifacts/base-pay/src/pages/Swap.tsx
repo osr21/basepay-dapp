@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useAccount, useReadContract, useChainId } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
 import { isAddress, parseUnits, formatUnits } from "viem";
 import { base } from "viem/chains";
 import { useGetSwapQuote, useExecuteGaslessSwap, getGetSwapQuoteQueryKey } from "@workspace/api-client-react";
@@ -23,8 +23,8 @@ function TokenBadge({ token }: { token: GaslessToken }) {
 }
 
 export default function SwapPage() {
-  const { address, isConnected } = useAccount();
-  const chainId = useChainId();
+  const { address, isConnected, chain } = useAccount();
+  const chainId = chain?.id;
 
   // Token direction: index 0 = USDC, index 1 = EURC
   const [fromIdx, setFromIdx] = useState(0);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { isAddress } from "viem";
 import { base } from "viem/chains";
 import { useListContacts, useGetAppConfig } from "@workspace/api-client-react";
@@ -18,8 +18,8 @@ import BlockaidNotice from "@/components/BlockaidNotice";
 type SendStep = "idle" | "signing" | "fee" | "payment" | "done";
 
 export default function SendPage() {
-  const { address, isConnected } = useAccount();
-  const chainId = useChainId();
+  const { address, isConnected, chain } = useAccount();
+  const chainId = chain?.id;
   const [to, setTo]               = useState("");
   const [amount, setAmount]       = useState("");
   const [memo, setMemo]           = useState("");

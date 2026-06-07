@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
 import { isAddress } from "viem";
+import { base } from "viem/chains";
 import { useListContacts, useGetAppConfig } from "@workspace/api-client-react";
 import {
   USDC_ADDRESS, USDC_ABI, ROUTER_ABI,
@@ -18,6 +19,7 @@ type SendStep = "idle" | "signing" | "fee" | "payment" | "done";
 
 export default function SendPage() {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
   const [to, setTo]               = useState("");
   const [amount, setAmount]       = useState("");
   const [memo, setMemo]           = useState("");
@@ -99,7 +101,7 @@ export default function SendPage() {
   const isValidAddress = isAddress(effectiveTo);
   const isValidAmount  = parseFloat(amount) > 0;
   const isBusy         = isSigning || isFeePending || isFeeConfirming || isMainPending || isMainConfirming;
-  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle" && !isResolvingName;
+  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle" && !isResolvingName && chainId === base.id;
 
   async function handleSend() {
     if (!canSend) return;
@@ -438,7 +440,7 @@ export default function SendPage() {
               : "bg-secondary text-muted-foreground cursor-not-allowed"
           }`}
         >
-          {inProgressLabel ?? (useRouter ? "Sign & Send via Router" : "Send USDC")}
+          {chainId !== base.id ? "Wrong Network" : inProgressLabel ?? (useRouter ? "Sign & Send via Router" : "Send USDC")}
         </button>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
 import { isAddress, decodeEventLog } from "viem";
+import { base } from "viem/chains";
 import {
   USDC_ADDRESS, SUBSCRIPTION_MANAGER_ABI, FEE_BPS,
   parseUSDC, formatUSDC, truncateAddress,
@@ -28,6 +29,7 @@ function subPermitDeadline(): bigint {
 
 export default function SubscriptionsPage() {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
   const [payee, setPayee]       = useState("");
   const [amount, setAmount]     = useState("");
   const [intervalIdx, setIntervalIdx] = useState(2);
@@ -119,7 +121,7 @@ export default function SubscriptionsPage() {
   const isValidPayee  = isAddress(payee);
   const isValidAmount = parseFloat(amount) > 0;
   const isBusy        = isSigning || isSubPending || isConfirming;
-  const canProceed    = isValidPayee && isValidAmount && !isBusy;
+  const canProceed    = isValidPayee && isValidAmount && !isBusy && chainId === base.id;
 
   if (!isConnected) {
     return (
@@ -300,7 +302,7 @@ export default function SubscriptionsPage() {
         onClick={handleSubscribe}
         disabled={!canProceed || !SUB_MANAGER_ADDRESS}
         className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
-      >{isBusy ? "Processing…" : `Subscribe · ${amount || "0"} USDC / ${interval.display}`}</button>
+      >{chainId !== base.id ? "Wrong Network" : isBusy ? "Processing…" : `Subscribe · ${amount || "0"} USDC / ${interval.display}`}</button>
     </div>
   );
 }

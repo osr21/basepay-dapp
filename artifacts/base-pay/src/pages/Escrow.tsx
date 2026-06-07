@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
 import { isAddress, decodeEventLog } from "viem";
+import { base } from "viem/chains";
 import {
   USDC_ADDRESS, ESCROW_ABI, FEE_BPS,
   parseUSDC, formatUSDC, truncateAddress,
@@ -20,6 +21,7 @@ const DURATIONS = [
 
 export default function EscrowPage() {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
   const [payee, setPayee]     = useState("");
   const [amount, setAmount]   = useState("");
   const [ttlIdx, setTtlIdx]   = useState(1);
@@ -88,7 +90,7 @@ export default function EscrowPage() {
   const isValidPayee  = isAddress(payee);
   const isValidAmount = parseFloat(amount) > 0;
   const isBusy        = isSigning || isCreating || isConfirming;
-  const canProceed    = isValidPayee && isValidAmount && !isBusy;
+  const canProceed    = isValidPayee && isValidAmount && !isBusy && chainId === base.id;
 
   if (!isConnected) {
     return (
@@ -263,7 +265,7 @@ export default function EscrowPage() {
         onClick={handleCreate}
         disabled={!canProceed || !ESCROW_ADDRESS}
         className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
-      >{isBusy ? "Processing…" : "Create Escrow"}</button>
+      >{chainId !== base.id ? "Wrong Network" : isBusy ? "Processing…" : "Create Escrow"}</button>
     </div>
   );
 }

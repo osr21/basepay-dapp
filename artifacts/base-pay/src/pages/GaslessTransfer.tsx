@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import { useAccount, useReadContract, useChainId } from "wagmi";
 import { isAddress, parseUnits, formatUnits } from "viem";
+import { base } from "viem/chains";
 import { useGetGaslessFee, useSubmitGaslessTransfer } from "@workspace/api-client-react";
 import { useListContacts } from "@workspace/api-client-react";
 import { GASLESS_TOKENS, truncateAddress, type GaslessToken } from "@/lib/wagmi";
@@ -13,6 +14,7 @@ type Step = "idle" | "signing" | "relaying" | "done";
 
 export default function GaslessTransferPage() {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
 
   // Token selection — default to USDC
   const [selectedToken, setSelectedToken] = useState<GaslessToken>(GASLESS_TOKENS[0]);
@@ -56,7 +58,7 @@ export default function GaslessTransferPage() {
   const isValidAddress = isAddress(effectiveTo);
   const isValidAmount  = parseFloat(amount) > 0;
   const isBusy         = step === "signing" || step === "relaying";
-  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle";
+  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle" && chainId === base.id;
 
   async function handleSend() {
     if (!canSend || !address) return;
@@ -444,7 +446,7 @@ export default function GaslessTransferPage() {
               : "bg-secondary text-muted-foreground cursor-not-allowed"
           }`}
         >
-          {`Sign & Send ${selectedToken.symbol} Gasless`}
+          {chainId !== base.id ? "Wrong Network" : `Sign & Send ${selectedToken.symbol} Gasless`}
         </button>
         <p className="text-center text-xs text-muted-foreground">
           1 signature · 0 ETH · 0 approvals

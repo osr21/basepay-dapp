@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import { useAccount, useReadContract, useChainId } from "wagmi";
 import { isAddress, parseUnits, formatUnits } from "viem";
+import { base } from "viem/chains";
 import { useGetSwapQuote, useExecuteGaslessSwap, getGetSwapQuoteQueryKey } from "@workspace/api-client-react";
 import { GASLESS_TOKENS, type GaslessToken } from "@/lib/wagmi";
 import { useTokenPermit } from "@/lib/useTokenPermit";
@@ -23,6 +24,7 @@ function TokenBadge({ token }: { token: GaslessToken }) {
 
 export default function SwapPage() {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
 
   // Token direction: index 0 = USDC, index 1 = EURC
   const [fromIdx, setFromIdx] = useState(0);
@@ -92,7 +94,7 @@ export default function SwapPage() {
   const { signPermit }              = useTokenPermit(address, fromToken);
   const { mutateAsync: execSwap }   = useExecuteGaslessSwap();
 
-  const canSwap = !!amountBig && amountBig > 0n && !!quote && !!quote.relayerAddress && step === "idle" && isConnected;
+  const canSwap = !!amountBig && amountBig > 0n && !!quote && !!quote.relayerAddress && step === "idle" && isConnected && chainId === base.id;
 
   async function handleSwap() {
     if (!canSwap || !address || !quote?.relayerAddress) return;
@@ -407,7 +409,9 @@ export default function SwapPage() {
               : "bg-secondary text-muted-foreground cursor-not-allowed"
           }`}
         >
-          {!amount || !amountBig
+          {chainId !== base.id
+            ? "Wrong Network"
+            : !amount || !amountBig
             ? "Enter an amount"
             : !quote
             ? isQuoting ? "Getting quote…" : "Enter an amount"

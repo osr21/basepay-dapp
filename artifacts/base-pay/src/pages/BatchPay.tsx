@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useChainId } from "wagmi";
 import { isAddress } from "viem";
+import { base } from "viem/chains";
 import {
   USDC_ADDRESS, BATCH_PAY_ABI, FEE_BPS,
   parseUSDC, truncateAddress,
@@ -18,6 +19,7 @@ function newRow(): Row { return { address: "", amount: "" }; }
 
 export default function BatchPayPage() {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
   const [rows, setRows]     = useState<Row[]>([newRow(), newRow()]);
   const [memo, setMemo]     = useState("");
   const [step, setStep]     = useState<"idle" | "signing" | "sending" | "done">("idle");
@@ -85,7 +87,7 @@ export default function BatchPayPage() {
   }
 
   const isBusy = isSigning || isSending || isConfirming;
-  const canProceed = validRows.length >= 1 && !isBusy;
+  const canProceed = validRows.length >= 1 && !isBusy && chainId === base.id;
 
   if (!isConnected) {
     return (
@@ -268,7 +270,7 @@ export default function BatchPayPage() {
         disabled={!canProceed || !BATCH_PAY_ADDRESS}
         className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_hsl(221_83%_53%/0.3)]"
       >
-        {isBusy ? "Processing…" : `Send to ${validRows.length} recipient${validRows.length !== 1 ? "s" : ""}`}
+        {chainId !== base.id ? "Wrong Network" : isBusy ? "Processing…" : `Send to ${validRows.length} recipient${validRows.length !== 1 ? "s" : ""}`}
       </button>
     </div>
   );

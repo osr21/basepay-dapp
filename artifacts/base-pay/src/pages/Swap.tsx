@@ -31,12 +31,17 @@ export default function SwapPage() {
   // that USDC's permit function cannot verify, causing the permit TX to revert.
   // Injected wallets (MetaMask, Brave) are always EOAs — skip the RPC call.
   const isInjected = connector?.id === "injected";
-  const { data: walletBytecode } = useQuery({
+  const { data: walletBytecode, isFetching: isBytecodeFetching } = useQuery({
     queryKey:  ["walletBytecode", address],
     queryFn:   () => publicClient!.getBytecode({ address: address! }),
     enabled:   !!address && !!publicClient && !isInjected,
     staleTime: 60_000,
   });
+  // Block interaction until the bytecode check resolves — if we treat an
+  // in-flight check as "not a smart wallet", users can click through before the
+  // result arrives, the permit lands on-chain but grants no allowance, and
+  // transferFrom fails after gas is already spent by the relayer.
+  const isSmartWalletPending = !isInjected && !!address && isBytecodeFetching;
   const isSmartWallet = !isInjected && !!walletBytecode && walletBytecode !== "0x";
 
   // Token direction: index 0 = USDC, index 1 = EURC
@@ -108,7 +113,7 @@ export default function SwapPage() {
   const { signPermit }              = useTokenPermit(address, fromToken);
   const { mutateAsync: execSwap }   = useExecuteGaslessSwap();
 
-  const canSwap = !isSmartWallet && !!amountBig && amountBig > 0n && !!quote && !!quote.relayerAddress && step === "idle" && isConnected;
+  const canSwap = !isSmartWallet && !isSmartWalletPending && !!amountBig && amountBig > 0n && !!quote && !!quote.relayerAddress && step === "idle" && isConnected;
 
   async function handleSwap() {
     if (!canSwap || !address || !quote?.relayerAddress) return;
@@ -411,6 +416,13 @@ export default function SwapPage() {
           </p>
         )}
 
+        {isSmartWalletPending && (
+          <div className="flex items-center gap-2.5 rounded-lg bg-secondary border border-border px-3 py-2.5 text-xs text-muted-foreground">
+            <span className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0" />
+            Checking wallet compatibility…
+          </div>
+        )}
+
         {isSmartWallet && (
           <div className="flex items-start gap-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/25 px-3 py-2.5">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgb(234 179 8)" strokeWidth="2" className="shrink-0 mt-0.5">
@@ -440,7 +452,9 @@ export default function SwapPage() {
               : "bg-secondary text-muted-foreground cursor-not-allowed"
           }`}
         >
-          {isSmartWallet
+          {isSmartWalletPending
+            ? "Checking wallet…"
+            : isSmartWallet
             ? "Smart wallet not supported — use EOA"
             : !amount || !amountBig
             ? "Enter an amount"

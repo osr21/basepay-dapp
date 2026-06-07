@@ -24,12 +24,16 @@ export default function GaslessTransferPage() {
   //
   // Injected wallets (MetaMask, Brave, etc.) are always EOAs — skip the RPC call.
   const isInjected = connector?.id === "injected";
-  const { data: bytecode } = useQuery({
+  const { data: bytecode, isFetching: isBytecodeFetching } = useQuery({
     queryKey: ["walletBytecode", address],
     queryFn:  () => publicClient!.getBytecode({ address: address! }),
     enabled:  !!address && !!publicClient && !isInjected,
     staleTime: 60_000,
   });
+  // Guard against the race where the bytecode RPC is still in-flight: if we
+  // allow sending before the result arrives, the check evaluates to false and
+  // an incompatible smart wallet slips through.
+  const isSmartWalletPending = !isInjected && !!address && isBytecodeFetching;
   const isSmartWallet = !isInjected && !!bytecode && bytecode !== "0x";
 
   const [to,           setTo]           = useState("");
@@ -71,7 +75,7 @@ export default function GaslessTransferPage() {
   const isValidAddress = isAddress(effectiveTo);
   const isValidAmount  = parseFloat(amount) > 0;
   const isBusy         = step === "signing" || step === "relaying";
-  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle" && !isSmartWallet;
+  const canSend        = isValidAddress && isValidAmount && !isBusy && step === "idle" && !isSmartWallet && !isSmartWalletPending;
 
   async function handleSend() {
     if (!canSend || !address) return;
@@ -482,7 +486,7 @@ export default function GaslessTransferPage() {
               : "bg-secondary text-muted-foreground cursor-not-allowed"
           }`}
         >
-          {isSmartWallet ? "Not available for smart wallets" : `Sign & Send ${selectedToken.symbol} Gasless`}
+          {isSmartWalletPending ? "Checking wallet…" : isSmartWallet ? "Not available for smart wallets" : `Sign & Send ${selectedToken.symbol} Gasless`}
         </button>
         <p className="text-center text-xs text-muted-foreground">
           1 signature · 0 ETH · 0 approvals

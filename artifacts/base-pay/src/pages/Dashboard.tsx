@@ -60,9 +60,10 @@ function NotConnected() {
         Connect your wallet to send and receive USDC globally on Base — instant, near-zero fees.
       </p>
       <WalletButton />
-      <div className="mt-12 grid grid-cols-3 gap-6 max-w-lg w-full">
+      <div className="mt-12 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-2xl w-full">
         {[
           { label: "Send USDC", desc: "Transfer to any address instantly", icon: "↗" },
+          { label: "Swap", desc: "Convert USDC ↔ EURC gaslessly", icon: "⇄" },
           { label: "Request", desc: "Create a shareable payment link", icon: "⬡" },
           { label: "Track", desc: "Monitor all your payment requests", icon: "◈" },
         ].map((f) => (
@@ -131,6 +132,12 @@ export default function Dashboard() {
             <a className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all shadow-[0_0_16px_hsl(221_83%_53%/0.3)]">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" x2="11" y1="2" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
               Send
+            </a>
+          </Link>
+          <Link href="/swap">
+            <a className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-border text-sm font-semibold hover:border-primary/40 transition-all">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 16V4m0 0L3 8m4-4 4 4"/><path d="M17 8v12m0 0 4-4m-4 4-4-4"/></svg>
+              Swap
             </a>
           </Link>
           <Link href="/request">

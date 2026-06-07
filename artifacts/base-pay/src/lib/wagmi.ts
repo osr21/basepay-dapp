@@ -1,7 +1,7 @@
 import { createConfig, http, createConnector } from "wagmi";
 import { base } from "viem/chains";
 import { injected } from "wagmi/connectors";
-import { concat, type Hex } from "viem";
+import { concat, fallback, type Hex } from "viem";
 import { Attribution } from "ox/erc8021";
 
 // ── Coinbase Verifications (EAS) ──────────────────────────────────────────────
@@ -66,7 +66,11 @@ export const config = createConfig({
     attributedInjected(),
   ],
   transports: {
-    [base.id]: http(),
+    [base.id]: fallback([
+      http(import.meta.env.VITE_RPC_URL || "https://mainnet.base.org"),
+      http("https://base.llamarpc.com"),
+      http("https://base-rpc.publicnode.com"),
+    ]),
   },
 });
 

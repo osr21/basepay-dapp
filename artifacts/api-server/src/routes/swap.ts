@@ -689,6 +689,18 @@ router.post("/swap/execute-approved", async (req, res) => {
       req.log.error({ pullHash }, "execute-approved TX2 (transferFrom) reverted");
       return res.status(500).json({ error: "Token pull reverted — verify your approval is still active.", pullHash });
     }
+    // Poll relayer balance until the RPC node reflects the TX2 state change (public nodes can lag 1-2 blocks)
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const bal = await publicClient.readContract({
+        address:      pair.tokenIn,
+        abi:          ERC20_ABI,
+        functionName: "balanceOf",
+        args:         [relayer.account.address],
+      }).catch(() => 0n);
+      if (bal >= amountBig) break;
+      req.log.warn({ attempt, bal: bal.toString(), amountBig: amountBig.toString() }, "RPC balance not yet updated after TX2 — waiting 2 s");
+      await new Promise(r => setTimeout(r, 2_000));
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message.slice(0, 150) : "transferFrom failed";
     req.log.error({ err }, "execute-approved TX2 (transferFrom) failed");
@@ -752,7 +764,9 @@ router.post("/swap/execute-approved", async (req, res) => {
 
   // TX4: swap via Aerodrome
   const routes = [{ from: pair.tokenIn, to: pair.tokenOut, stable: poolStable, factory: AERODROME_FACTORY }];
-  let swapHash: Hex;
+  let swapHash: Hex = "0x" as Hex;
+  let swapFailed = false;
+  let swapErr: unknown;
   try {
     swapHash = await writeWithRetry(
       () => relayer.client.writeContract({
@@ -765,9 +779,21 @@ router.post("/swap/execute-approved", async (req, res) => {
       }),
       "TX4 swap (pre-approved)",
     );
-    await publicClient.waitForTransactionReceipt({ hash: swapHash, confirmations: 1 });
+    const swapReceipt = await publicClient.waitForTransactionReceipt({ hash: swapHash, confirmations: 1 });
+    if (swapReceipt.status !== "success") {
+      swapFailed = true;
+      swapErr    = new Error("swapExactTokensForTokens reverted on-chain");
+      req.log.error({ swapHash }, "TX4 swap reverted on-chain");
+    }
   } catch (err) {
-    req.log.error({ err, pullHash }, "execute-approved swap failed — refunding user");
+    swapFailed = true;
+    swapErr    = err;
+    req.log.error({ err, pullHash }, "execute-approved TX4 swap threw");
+  }
+
+  if (swapFailed) {
+    // Wait for RPC state to sync before attempting refund (same lag that caused the swap failure)
+    await new Promise(r => setTimeout(r, 3_000));
     try {
       const refundHash = await writeWithRetry(
         () => relayer.client.writeContract({
@@ -785,7 +811,7 @@ router.post("/swap/execute-approved", async (req, res) => {
     } catch (refundErr) {
       req.log.error({ refundErr, owner, amountIn }, "refund also failed — tokens stuck with relayer");
     }
-    const raw   = err instanceof Error ? err.message : "Swap failed";
+    const raw   = swapErr instanceof Error ? swapErr.message : "Swap failed";
     const match = raw.match(/reverted with the following reason:\s*\n(.+)/m) ?? raw.match(/Error: (.+?)(?:\n|$)/);
     return res.status(500).json({ error: `Swap reverted: ${match?.[1] ?? raw.slice(0, 120)}. Contact support — tokens may be held by relayer.`, pullHash });
   }

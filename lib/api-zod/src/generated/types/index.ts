@@ -27,7 +27,6 @@ export * from './paymentRequestStatus';
 export * from './paymentRequestUpdate';
 export * from './paymentRequestUpdateStatus';
 export * from './paymentStats';
-export * from './preApprovedSwapInput';
 export * from './swapInput';
 export * from './swapQuoteResult';
 export * from './swapResult';

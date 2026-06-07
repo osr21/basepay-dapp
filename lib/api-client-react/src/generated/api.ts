@@ -38,7 +38,6 @@ import type {
   PaymentRequestInput,
   PaymentRequestUpdate,
   PaymentStats,
-  PreApprovedSwapInput,
   SwapInput,
   SwapQuoteResult,
   SwapResult
@@ -754,79 +753,6 @@ export function useGetSwapQuote<TData = Awaited<ReturnType<typeof getSwapQuote>>
 
 
 
-
-export const getExecuteApprovedSwapUrl = () => {
-
-
-
-
-  return `/api/swap/execute-approved`
-}
-
-/**
- * Smart-wallet fallback for users whose wallets cannot produce EIP-2612 permit signatures (e.g. Coinbase Smart Wallet with passkey signing). The user first calls token.approve(relayer, amount) in a normal on-chain transaction, then calls this endpoint. The relayer verifies the allowance exists, pulls the tokens, swaps via Aerodrome, and delivers the output to the user — paying all gas except the initial approve.
-
- * @summary Execute a USDC↔EURC swap using a pre-existing ERC-20 allowance (smart wallet path)
- */
-export const executeApprovedSwap = async (preApprovedSwapInput: PreApprovedSwapInput, options?: RequestInit): Promise<SwapResult> => {
-
-  return customFetch<SwapResult>(getExecuteApprovedSwapUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      preApprovedSwapInput,)
-  }
-);}
-
-
-
-
-export const getExecuteApprovedSwapMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof executeApprovedSwap>>, TError,{data: BodyType<PreApprovedSwapInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof executeApprovedSwap>>, TError,{data: BodyType<PreApprovedSwapInput>}, TContext> => {
-
-const mutationKey = ['executeApprovedSwap'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof executeApprovedSwap>>, {data: BodyType<PreApprovedSwapInput>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  executeApprovedSwap(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ExecuteApprovedSwapMutationResult = NonNullable<Awaited<ReturnType<typeof executeApprovedSwap>>>
-    export type ExecuteApprovedSwapMutationBody = BodyType<PreApprovedSwapInput>
-    export type ExecuteApprovedSwapMutationError = ErrorType<ErrorResponse>
-
-    /**
- * @summary Execute a USDC↔EURC swap using a pre-existing ERC-20 allowance (smart wallet path)
- */
-export const useExecuteApprovedSwap = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof executeApprovedSwap>>, TError,{data: BodyType<PreApprovedSwapInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof executeApprovedSwap>>,
-        TError,
-        {data: BodyType<PreApprovedSwapInput>},
-        TContext
-      > => {
-      return useMutation(getExecuteApprovedSwapMutationOptions(options));
-    }
 
 export const getExecuteGaslessSwapUrl = () => {
 

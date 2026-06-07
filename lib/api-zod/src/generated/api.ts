@@ -168,30 +168,6 @@ export const GetSwapQuoteResponse = zod.object({
 
 
 /**
- * Smart-wallet fallback for users whose wallets cannot produce EIP-2612 permit signatures (e.g. Coinbase Smart Wallet with passkey signing). The user first calls token.approve(relayer, amount) in a normal on-chain transaction, then calls this endpoint. The relayer verifies the allowance exists, pulls the tokens, swaps via Aerodrome, and delivers the output to the user — paying all gas except the initial approve.
-
- * @summary Execute a USDC↔EURC swap using a pre-existing ERC-20 allowance (smart wallet path)
- */
-export const ExecuteApprovedSwapBody = zod.object({
-  "tokenIn": zod.string().describe('Input token contract address (USDC or EURC)'),
-  "tokenOut": zod.string().describe('Output token contract address (USDC or EURC)'),
-  "amountIn": zod.string().describe('Input amount in atomic units (6 decimals) as decimal string'),
-  "owner": zod.string().describe('Wallet address of the token owner (must have pre-approved the relayer)'),
-  "slippageBps": zod.number().optional().describe('Acceptable slippage in basis points (0–100, default 50 = 0.5%)')
-})
-
-export const ExecuteApprovedSwapResponse = zod.object({
-  "txHash": zod.string().describe('On-chain hash of the Aerodrome swap transaction'),
-  "transferHash": zod.string().describe('On-chain hash of the relayer→user output token transfer'),
-  "tokenIn": zod.string(),
-  "tokenOut": zod.string(),
-  "amountIn": zod.string(),
-  "amountOutMin": zod.string().describe('Minimum output enforced on-chain (before protocol fee)'),
-  "amountOutAfterFee": zod.string().describe('Net amount transferred to the user after 0.30% protocol fee')
-})
-
-
-/**
  * @summary Execute a gasless USDC↔EURC swap via EIP-2612 permit + Aerodrome relayer
  */
 export const ExecuteGaslessSwapBody = zod.object({

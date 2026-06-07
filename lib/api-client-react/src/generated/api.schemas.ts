@@ -195,6 +195,19 @@ export interface SwapQuoteResult {
   stable?: boolean;
 }
 
+export interface PreApprovedSwapInput {
+  /** Input token contract address (USDC or EURC) */
+  tokenIn: string;
+  /** Output token contract address (USDC or EURC) */
+  tokenOut: string;
+  /** Input amount in atomic units (6 decimals) as decimal string */
+  amountIn: string;
+  /** Wallet address of the token owner (must have pre-approved the relayer) */
+  owner: string;
+  /** Acceptable slippage in basis points (0–100, default 50 = 0.5%) */
+  slippageBps?: number;
+}
+
 export interface SwapInput {
   /** Input token contract address (USDC or EURC) */
   tokenIn: string;

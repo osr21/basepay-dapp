@@ -226,6 +226,49 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /swap/execute-approved:
+    post:
+      operationId: executeApprovedSwap
+      tags: [swap]
+      summary: Execute a USDC↔EURC swap using a pre-existing ERC-20 allowance (smart wallet path)
+      description: >
+        Smart-wallet fallback for users whose wallets cannot produce EIP-2612 permit signatures
+        (e.g. Coinbase Smart Wallet with passkey signing). The user first calls
+        token.approve(relayer, amount) in a normal on-chain transaction, then calls this endpoint.
+        The relayer verifies the allowance exists, pulls the tokens, swaps via Aerodrome, and
+        delivers the output to the user — paying all gas except the initial approve.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreApprovedSwapInput"
+      responses:
+        "200":
+          description: Swap relayed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwapResult"
+        "400":
+          description: Validation or insufficient-allowance error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Relay error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Pool unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /swap/execute:
     post:
       operationId: executeGaslessSwap
@@ -610,6 +653,26 @@ components:
         stable:
           type: boolean
           description: Whether the best Aerodrome pool is stable (true) or volatile (false)
+
+    PreApprovedSwapInput:
+      type: object
+      required: [tokenIn, tokenOut, amountIn, owner]
+      properties:
+        tokenIn:
+          type: string
+          description: Input token contract address (USDC or EURC)
+        tokenOut:
+          type: string
+          description: Output token contract address (USDC or EURC)
+        amountIn:
+          type: string
+          description: Input amount in atomic units (6 decimals) as decimal string
+        owner:
+          type: string
+          description: Wallet address of the token owner (must have pre-approved the relayer)
+        slippageBps:
+          type: integer
+          description: Acceptable slippage in basis points (0–100, default 50 = 0.5%)
 
     SwapInput:
       type: object

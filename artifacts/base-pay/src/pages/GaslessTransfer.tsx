@@ -21,20 +21,21 @@ export default function GaslessTransferPage() {
 
   // Detect smart contract wallets — EIP-3009 requires an EOA signature (ecrecover),
   // so smart wallets (Coinbase Smart Wallet, Safe, etc.) are incompatible.
-  //
-  // Injected wallets (MetaMask, Brave, etc.) are always EOAs — skip the RPC call.
-  const isInjected = connector?.id === "injected";
+  // Always run the bytecode check — do NOT shortcut for injected connectors.
+  // Coinbase Smart Wallet (extension mode) injects itself as window.ethereum so
+  // wagmi labels it connector.id === "injected", but its addresses still carry
+  // EIP-7702 bytecode and produce passkey signatures that are incompatible with
+  // the EIP-3009 ecrecover path.  eth_getCode is cached for 60 s.
   const { data: bytecode, isFetching: isBytecodeFetching } = useQuery({
     queryKey: ["walletBytecode", address],
     queryFn:  () => publicClient!.getBytecode({ address: address! }),
-    enabled:  !!address && !!publicClient && !isInjected,
+    enabled:  !!address && !!publicClient,
     staleTime: 60_000,
   });
-  // Guard against the race where the bytecode RPC is still in-flight: if we
-  // allow sending before the result arrives, the check evaluates to false and
-  // an incompatible smart wallet slips through.
-  const isSmartWalletPending = !isInjected && !!address && isBytecodeFetching;
-  const isSmartWallet = !isInjected && !!bytecode && bytecode !== "0x";
+  // Block until the check resolves — an in-flight result evaluates to false and
+  // would let an incompatible smart wallet slip through.
+  const isSmartWalletPending = !!address && isBytecodeFetching;
+  const isSmartWallet = !!bytecode && bytecode !== "0x";
 
   const [to,           setTo]           = useState("");
   const [amount,       setAmount]       = useState("");

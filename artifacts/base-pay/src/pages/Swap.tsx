@@ -29,20 +29,24 @@ export default function SwapPage() {
   // Detect smart wallets — EIP-2612 permit requires an EOA ECDSA signature.
   // Smart wallets that use passkey (WebAuthn/p256) signing produce signatures
   // that USDC's permit function cannot verify, causing the permit TX to revert.
-  // Injected wallets (MetaMask, Brave) are always EOAs — skip the RPC call.
-  const isInjected = connector?.id === "injected";
+  // Always run the bytecode check — do NOT shortcut for injected connectors.
+  // Coinbase Smart Wallet (extension mode) injects itself as window.ethereum so
+  // wagmi labels it connector.id === "injected", but its addresses still carry
+  // EIP-7702 / smart-contract bytecode and use passkey signing that is
+  // incompatible with EIP-2612.  The eth_getCode call is cheap and cached for
+  // 60 s, so the extra RPC round-trip is negligible.
   const { data: walletBytecode, isFetching: isBytecodeFetching } = useQuery({
     queryKey:  ["walletBytecode", address],
     queryFn:   () => publicClient!.getBytecode({ address: address! }),
-    enabled:   !!address && !!publicClient && !isInjected,
+    enabled:   !!address && !!publicClient,
     staleTime: 60_000,
   });
-  // Block interaction until the bytecode check resolves — if we treat an
-  // in-flight check as "not a smart wallet", users can click through before the
-  // result arrives, the permit lands on-chain but grants no allowance, and
-  // transferFrom fails after gas is already spent by the relayer.
-  const isSmartWalletPending = !isInjected && !!address && isBytecodeFetching;
-  const isSmartWallet = !isInjected && !!walletBytecode && walletBytecode !== "0x";
+  // Block interaction until the check resolves — if we treated an in-flight
+  // check as "not a smart wallet", users could click through before the result
+  // arrives, the permit would land on-chain but grant no allowance, and TX2
+  // would fail after gas is already spent by the relayer.
+  const isSmartWalletPending = !!address && isBytecodeFetching;
+  const isSmartWallet = !!walletBytecode && walletBytecode !== "0x";
 
   // Token direction: index 0 = USDC, index 1 = EURC
   const [fromIdx, setFromIdx] = useState(0);

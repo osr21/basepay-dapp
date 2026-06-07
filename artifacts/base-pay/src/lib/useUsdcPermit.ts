@@ -55,12 +55,21 @@ export function useUsdcPermit(owner: `0x${string}` | undefined) {
 
     const deadline = BigInt(Math.floor(Date.now() / 1000) + deadlineSecs);
 
-    const sig = await signTypedDataAsync({
-      domain:      USDC_PERMIT_DOMAIN,
-      types:       PERMIT_TYPES,
-      primaryType: "Permit",
-      message:     { owner, spender, value, nonce: freshNonce, deadline },
-    });
+    let sig: `0x${string}`;
+    try {
+      sig = await signTypedDataAsync({
+        domain:      USDC_PERMIT_DOMAIN,
+        types:       PERMIT_TYPES,
+        primaryType: "Permit",
+        message:     { owner, spender, value, nonce: freshNonce, deadline },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/chainId.*must match|must match.*chainId/i.test(msg)) {
+        throw new Error("Wrong network — please switch your wallet to Base Mainnet and try again.");
+      }
+      throw err;
+    }
 
     const { v, r, s } = parseSignature(sig);
     return { v: Number(v), r: r as `0x${string}`, s: s as `0x${string}`, deadline };

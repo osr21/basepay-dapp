@@ -60,19 +60,28 @@ export function useUsdcAuthorization(
       verifyingContract: token.address,
     } as const;
 
-    const sig = await signTypedDataAsync({
-      domain,
-      types:       TRANSFER_TYPES,
-      primaryType: "TransferWithAuthorization",
-      message:     {
-        from:        owner,
-        to,
-        value,
-        validAfter,
-        validBefore,
-        nonce,
-      },
-    });
+    let sig: `0x${string}`;
+    try {
+      sig = await signTypedDataAsync({
+        domain,
+        types:       TRANSFER_TYPES,
+        primaryType: "TransferWithAuthorization",
+        message:     {
+          from:        owner,
+          to,
+          value,
+          validAfter,
+          validBefore,
+          nonce,
+        },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/chainId.*must match|must match.*chainId/i.test(msg)) {
+        throw new Error("Wrong network — please switch your wallet to Base Mainnet and try again.");
+      }
+      throw err;
+    }
 
     let parsed: ReturnType<typeof parseSignature>;
     try {

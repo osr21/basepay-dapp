@@ -69,12 +69,21 @@ export function useTokenPermit(
       verifyingContract: token.address,
     } as const;
 
-    const sig = await signTypedDataAsync({
-      domain,
-      types:       PERMIT_TYPES,
-      primaryType: "Permit",
-      message:     { owner, spender, value, nonce: freshNonce as bigint, deadline },
-    });
+    let sig: `0x${string}`;
+    try {
+      sig = await signTypedDataAsync({
+        domain,
+        types:       PERMIT_TYPES,
+        primaryType: "Permit",
+        message:     { owner, spender, value, nonce: freshNonce as bigint, deadline },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/chainId.*must match|must match.*chainId/i.test(msg)) {
+        throw new Error("Wrong network — please switch your wallet to Base Mainnet and try again.");
+      }
+      throw err;
+    }
 
     const { v, r, s } = parseSignature(sig);
     return { v: Number(v), r: r as `0x${string}`, s: s as `0x${string}`, deadline };

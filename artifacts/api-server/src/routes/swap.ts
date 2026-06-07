@@ -554,4 +554,54 @@ router.post("/swap/execute", async (req, res) => {
   });
 });
 
+// ── One-time recovery: send stuck USDC from relayer back to recipient ─────────
+// POST /api/swap/recover  { recipient, amountUsdc }
+// Requires X-Recovery-Secret header matching SESSION_SECRET.
+router.post("/swap/recover", async (req, res) => {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || req.headers["x-recovery-secret"] !== secret) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const parsed = z.object({
+    recipient:   z.string().refine(isAddress, "invalid address"),
+    amountUsdc:  z.number().int().positive().max(100_000_000), // max 100 USDC safety cap
+  }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
+
+  const { recipient, amountUsdc } = parsed.data;
+  const amountMicro = BigInt(amountUsdc) * 1_000_000n; // 1 USDC = 1e6 micro
+
+  let relayer: Relayer;
+  try { relayer = getRelayer(); } catch { return res.status(503).json({ error: "Relayer not configured" }); }
+
+  // Sanity: check relayer balance
+  const bal = await publicClient.readContract({
+    address: USDC, abi: ERC20_ABI, functionName: "balanceOf",
+    args: [relayer.account.address],
+  });
+  if (bal < amountMicro) {
+    return res.status(400).json({ error: `Relayer only has ${bal.toString()} micro-USDC`, balance: bal.toString() });
+  }
+
+  try {
+    const hash = await writeWithRetry(
+      () => relayer.client.writeContract({
+        chain:        base,
+        account:      relayer.account,
+        address:      USDC,
+        abi:          ERC20_ABI,
+        functionName: "transfer",
+        args:         [recipient as `0x${string}`, amountMicro],
+      }),
+      "recovery transfer",
+    );
+    req.log.info({ hash, recipient, amountMicro: amountMicro.toString() }, "recovery transfer sent");
+    return res.json({ hash, recipient, amountMicro: amountMicro.toString() });
+  } catch (err) {
+    req.log.error({ err }, "recovery transfer failed");
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Transfer failed" });
+  }
+});
+
 export default router;

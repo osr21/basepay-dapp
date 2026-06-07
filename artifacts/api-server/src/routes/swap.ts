@@ -44,10 +44,10 @@ function getRelayer(): Relayer {
   return _relayer;
 }
 
-// ── Retry helper for EIP-7702 "in-flight transaction limit" ─────────────────
-// Base RPC enforces max 1 pending tx at a time for EIP-7702 delegated accounts.
-// Even after waitForTransactionReceipt confirms a tx there is a brief window
-// where the sequencer still considers it in-flight. Retry with linear backoff.
+// ── Retry helper for sequencer "in-flight transaction limit" ─────────────────
+// Base RPC enforces max 1 pending tx per sender at a time. Even after
+// waitForTransactionReceipt confirms a tx there is a brief window where the
+// sequencer still considers it in-flight. Retry with linear backoff.
 async function writeWithRetry<T>(
   fn:          () => Promise<T>,
   label:       string,
@@ -368,8 +368,7 @@ router.post("/swap/execute", async (req, res) => {
       req.log.error({ permitHash, status: permitReceipt.status }, "swap TX1 (permit) reverted on-chain");
       return res.status(400).json({
         error:
-          "Permit was rejected by the token contract. Smart wallets that use passkey (WebAuthn) " +
-          "signing are not compatible with EIP-2612 — please connect with a seed-phrase (EOA) wallet.",
+          "Permit was rejected by the token contract — the permit signature may be invalid or expired.",
         permitHash,
       });
     }
@@ -389,13 +388,11 @@ router.post("/swap/execute", async (req, res) => {
   if (allowanceAfterPermit < amountBig) {
     req.log.error(
       { allowanceAfterPermit: allowanceAfterPermit.toString(), amountIn, permitHash },
-      "permit mined but allowance not set — smart wallet incompatibility suspected",
+      "permit mined but allowance not set",
     );
     return res.status(400).json({
       error:
-        "Permit was accepted on-chain but did not grant the expected allowance. " +
-        "Smart wallets with passkey signing are not compatible with EIP-2612 — " +
-        "please connect with a seed-phrase (EOA) wallet.",
+        "Permit was accepted on-chain but did not grant the expected allowance.",
       permitHash,
     });
   }

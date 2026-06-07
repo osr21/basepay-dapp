@@ -1,16 +1,8 @@
 import { createConfig, http, createConnector } from "wagmi";
 import { base } from "viem/chains";
-import { injected, coinbaseWallet } from "wagmi/connectors";
+import { injected } from "wagmi/connectors";
 import { concat, type Hex } from "viem";
 import { Attribution } from "ox/erc8021";
-
-// ── CoinbaseSmartWallet (ERC-4337) ────────────────────────────────────────────
-export const COINBASE_SMART_WALLET_FACTORY =
-  "0x0BA5ED0c6AA8c49038F819E587E2633c4A9F428a" as const;
-export const COINBASE_SMART_WALLET_IMPL =
-  "0x000100abaad02f1cfC8Bbe32bD5a564817339E72" as const;
-export const ERC4337_ENTRY_POINT_V07 =
-  "0x0000000071727De22E5E9d8BAf0edAc6f37da032" as const;
 
 // ── Coinbase Verifications (EAS) ──────────────────────────────────────────────
 export const EAS_ADDRESS         = "0x4200000000000000000000000000000000000021" as const;
@@ -68,17 +60,10 @@ function attributedInjected() {
   });
 }
 
-// ── Coinbase Smart Wallet connector (ERC-4337, passkey support) ───────────────
-export const cbSmartWalletConnector = coinbaseWallet({
-  appName: "BasePay",
-  preference: { options: "all" },
-});
-
 export const config = createConfig({
   chains: [base],
   connectors: [
     attributedInjected(),
-    cbSmartWalletConnector,
   ],
   transports: {
     [base.id]: http(),

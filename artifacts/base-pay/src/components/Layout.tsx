@@ -3,7 +3,7 @@ import { useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } fro
 import { injected } from "wagmi/connectors";
 import { base } from "viem/chains";
 import { useGetAppConfig } from "@workspace/api-client-react";
-import { truncateAddress, cbSmartWalletConnector } from "@/lib/wagmi";
+import { truncateAddress } from "@/lib/wagmi";
 import { useState } from "react";
 
 const NAV = [
@@ -82,12 +82,10 @@ function WrongNetworkBanner() {
 }
 
 export function WalletButton() {
-  const { address, isConnected, connector } = useAccount();
+  const { address, isConnected } = useAccount();
   const { connect }    = useConnect();
   const { disconnect } = useDisconnect();
   const [showPicker, setShowPicker] = useState(false);
-
-  const isSmartWallet = connector?.id === "coinbaseWalletSDK";
 
   if (isConnected && address) {
     return (
@@ -98,11 +96,6 @@ export function WalletButton() {
       >
         <span className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" />
         {truncateAddress(address)}
-        {isSmartWallet && (
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20 leading-none">
-            Smart
-          </span>
-        )}
       </button>
     );
   }
@@ -133,22 +126,6 @@ export function WalletButton() {
               <div>
                 <div className="font-semibold text-foreground">Browser Wallet</div>
                 <div className="text-xs text-muted-foreground">MetaMask, Rabby…</div>
-              </div>
-            </button>
-            <button
-              onClick={() => { connect({ connector: cbSmartWalletConnector }); setShowPicker(false); }}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-secondary transition-colors text-sm text-left"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <circle cx="12" cy="12" r="10" fill="#0052FF" fillOpacity="0.1" stroke="#0052FF" strokeOpacity="0.6"/>
-                <path d="M8.5 12a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z" fill="#0052FF" fillOpacity="0.8" stroke="none"/>
-              </svg>
-              <div>
-                <div className="font-semibold text-foreground flex items-center gap-1.5">
-                  Smart Wallet
-                  <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/20 leading-none">NEW</span>
-                </div>
-                <div className="text-xs text-muted-foreground">Passkey · No seed phrase</div>
               </div>
             </button>
             <div className="border-t border-border mt-1 pt-1">

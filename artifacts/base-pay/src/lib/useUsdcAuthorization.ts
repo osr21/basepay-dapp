@@ -80,10 +80,7 @@ export function useUsdcAuthorization(
     } catch {
       throw new Error(
         "Your wallet returned an incompatible signature format. " +
-        "EIP-3009 gasless transfers use ecrecover on-chain and require an EOA " +
-        "(externally owned account) signature — smart contract wallets using " +
-        "Passkeys or WebAuthn are not supported. Please reconnect with MetaMask " +
-        "or Coinbase Wallet in standard (non-smart wallet) mode.",
+        "EIP-3009 gasless transfers require a standard secp256k1 (EOA) signature.",
       );
     }
 

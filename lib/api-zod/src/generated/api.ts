@@ -156,13 +156,13 @@ export const GetSwapQuoteQueryParams = zod.object({
 })
 
 export const GetSwapQuoteResponse = zod.object({
-  "amountOut": zod.string().describe('Expected gross output amount in atomic units (before protocol fee)'),
-  "amountOutMin": zod.string().describe('Minimum output amount after 1% slippage guard (before protocol fee)'),
+  "amountOut": zod.string().describe('Expected output amount in atomic units'),
+  "amountOutMin": zod.string().describe('Minimum output amount after slippage guard'),
   "fee": zod.number().describe('Aerodrome pool type indicator (100 = stable pool, 500 = volatile pool)'),
-  "protocolFeeBps": zod.number().describe('BasePay protocol fee in basis points (e.g. 30 = 0.30%)'),
-  "protocolFeeAmount": zod.string().describe('Protocol fee amount in atomic units deducted from amountOut'),
-  "amountOutAfterFee": zod.string().describe('Net output amount the user receives after protocol fee'),
-  "relayerAddress": zod.string().optional().describe('Relayer wallet address — use as the EIP-2612 permit spender'),
+  "protocolFeeBps": zod.number().describe('BasePay protocol fee in basis points (0 = free)'),
+  "protocolFeeAmount": zod.string().describe('Protocol fee amount in atomic units (0 for current version)'),
+  "amountOutAfterFee": zod.string().describe('Net output amount the user receives (= amountOut when fee is 0)'),
+  "poolAddress": zod.string().describe('Aerodrome pool address — use as the EIP-3009 transferWithAuthorization recipient'),
   "stable": zod.boolean().optional().describe('Whether the best Aerodrome pool is stable (true) or volatile (false)')
 })
 
@@ -174,22 +174,22 @@ export const ExecuteGaslessSwapBody = zod.object({
   "tokenIn": zod.string().describe('Input token contract address (USDC or EURC)'),
   "tokenOut": zod.string().describe('Output token contract address (USDC or EURC)'),
   "amountIn": zod.string().describe('Input amount in atomic units (6 decimals) as decimal string'),
-  "owner": zod.string().describe('Wallet address of the token owner (signer of the permit)'),
-  "deadline": zod.string().describe('Unix timestamp permit deadline'),
-  "permitV": zod.number().describe('Permit signature v component'),
-  "permitR": zod.string().describe('Permit signature r component (0x-prefixed 32-byte hex)'),
-  "permitS": zod.string().describe('Permit signature s component (0x-prefixed 32-byte hex)'),
+  "owner": zod.string().describe('Wallet address of the token owner (signer of the EIP-3009 authorization)'),
+  "validAfter": zod.string().describe('EIP-3009 validAfter Unix timestamp (seconds, decimal string)'),
+  "validBefore": zod.string().describe('EIP-3009 validBefore Unix timestamp (seconds, decimal string)'),
+  "nonce": zod.string().describe('EIP-3009 random nonce (0x-prefixed 32-byte hex)'),
+  "v": zod.number().describe('Authorization signature v component (27 or 28)'),
+  "r": zod.string().describe('Authorization signature r component (0x-prefixed 32-byte hex)'),
+  "s": zod.string().describe('Authorization signature s component (0x-prefixed 32-byte hex)'),
   "slippageBps": zod.number().optional().describe('Acceptable slippage in basis points (0–100, default 50 = 0.5%)')
 })
 
 export const ExecuteGaslessSwapResponse = zod.object({
-  "txHash": zod.string().describe('On-chain hash of the Aerodrome swap transaction'),
-  "transferHash": zod.string().describe('On-chain hash of the relayer→user output token transfer'),
+  "txHash": zod.string().describe('On-chain hash of the Aerodrome pool.swap transaction (output arrives in user wallet from this tx)'),
   "tokenIn": zod.string(),
   "tokenOut": zod.string(),
   "amountIn": zod.string(),
-  "amountOutMin": zod.string().describe('Minimum output enforced on-chain (before protocol fee)'),
-  "amountOutAfterFee": zod.string().describe('Net amount transferred to the user after 0.30% protocol fee')
+  "amountOutAfterFee": zod.string().describe('Net output amount received directly by the user from the pool')
 })
 
 

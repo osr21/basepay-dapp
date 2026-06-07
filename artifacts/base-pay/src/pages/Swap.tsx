@@ -4,7 +4,7 @@ import { isAddress, parseUnits, formatUnits } from "viem";
 import { base } from "viem/chains";
 import { useGetSwapQuote, useExecuteGaslessSwap, getGetSwapQuoteQueryKey } from "@workspace/api-client-react";
 import { GASLESS_TOKENS, type GaslessToken } from "@/lib/wagmi";
-import { useTokenPermit } from "@/lib/useTokenPermit";
+import { useUsdcAuthorization } from "@/lib/useUsdcAuthorization";
 import { WalletButton } from "@/components/Layout";
 
 type Step = "idle" | "signing" | "swapping" | "done";
@@ -91,13 +91,14 @@ export default function SwapPage() {
     setError(undefined);
   }, [amount, fromIdx]);
 
-  const { signPermit }              = useTokenPermit(address, fromToken);
-  const { mutateAsync: execSwap }   = useExecuteGaslessSwap();
+  const { signAuthorization } = useUsdcAuthorization(address, fromToken);
+  const { mutateAsync: execSwap } = useExecuteGaslessSwap();
 
-  const canSwap = !!amountBig && amountBig > 0n && !!quote && !!quote.relayerAddress && step === "idle" && isConnected && chainId === base.id;
+  // poolAddress from quote is used as the EIP-3009 authorization recipient
+  const canSwap = !!amountBig && amountBig > 0n && !!quote && !!quote.poolAddress && step === "idle" && isConnected && chainId === base.id;
 
   async function handleSwap() {
-    if (!canSwap || !address || !quote?.relayerAddress) return;
+    if (!canSwap || !address || !quote?.poolAddress) return;
     setError(undefined);
 
     if (fromBal !== undefined && amountBig! > fromBal) {
@@ -107,20 +108,23 @@ export default function SwapPage() {
 
     try {
       setStep("signing");
-      const permitter = quote.relayerAddress as `0x${string}`;
-      const { v, r, s, deadline } = await signPermit(permitter, amountBig!, 1_800);
+      // Sign EIP-3009: authorize transfer directly from user wallet to the Aerodrome pool.
+      // The relay wallet never receives the tokens — it only submits the transaction.
+      const auth = await signAuthorization(quote.poolAddress as `0x${string}`, amountBig!, 1_800);
 
       setStep("swapping");
       const result = await execSwap({
         data: {
-          tokenIn:  fromToken.address,
-          tokenOut: toToken.address,
-          amountIn: amountBig!.toString(),
-          owner:    address,
-          deadline: deadline.toString(),
-          permitV:  v,
-          permitR:  r,
-          permitS:  s,
+          tokenIn:     fromToken.address,
+          tokenOut:    toToken.address,
+          amountIn:    amountBig!.toString(),
+          owner:       address,
+          validAfter:  auth.validAfter.toString(),
+          validBefore: auth.validBefore.toString(),
+          nonce:       auth.nonce,
+          v:           auth.v,
+          r:           auth.r,
+          s:           auth.s,
           slippageBps: 50,
         },
       });
@@ -171,10 +175,10 @@ export default function SwapPage() {
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
           </div>
-          <h2 className="text-lg font-bold">Sign permit in wallet</h2>
+          <h2 className="text-lg font-bold">Sign authorization in wallet</h2>
           <p className="text-sm text-muted-foreground">
             This is an off-chain signature — <span className="text-green-400 font-medium">not a transaction</span>.
-            Authorises the relayer to pull your {fromToken.symbol}. Zero gas from you.
+            Authorises your {fromToken.symbol} to move directly to the Aerodrome pool. Zero gas from you.
           </p>
           <p className="text-xs text-muted-foreground font-mono">Waiting for signature...</p>
         </div>
@@ -194,7 +198,7 @@ export default function SwapPage() {
           </div>
           <h2 className="text-lg font-bold">Executing swap...</h2>
           <p className="text-sm text-muted-foreground">
-            The BasePay relayer is executing your swap on Aerodrome Finance. This takes a moment.
+            The BasePay relayer is routing your swap through Aerodrome Finance. Your tokens go pool-direct — the relay wallet never holds them.
           </p>
         </div>
       </div>
@@ -220,7 +224,7 @@ export default function SwapPage() {
           </p>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-xs text-green-400 font-medium mb-4">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            Zero gas paid — relayed by BasePay
+            Zero gas · Zero relay custody · Pool-direct
           </div>
           {txHash && (
             <a
@@ -258,7 +262,7 @@ export default function SwapPage() {
           <span className="px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-xs text-green-400 font-semibold">Zero ETH</span>
         </div>
         <p className="text-sm text-muted-foreground">
-          Swap USDC ↔ EURC via Aerodrome Finance on Base — gasless, one signature
+          Swap USDC ↔ EURC via Aerodrome Finance on Base — gasless, one signature, pool-direct
         </p>
       </div>
 
@@ -355,7 +359,7 @@ export default function SwapPage() {
         {quote && amountBig && (
           <div className="rounded-lg bg-secondary border border-border px-3.5 py-3 text-xs space-y-1.5">
             <div className="flex justify-between text-muted-foreground">
-              <span>Rate (gross)</span>
+              <span>Rate</span>
               <span>
                 1 {fromToken.symbol} ≈{" "}
                 {(parseFloat(formatUnits(BigInt(quote.amountOut), toToken.decimals)) /
@@ -371,18 +375,16 @@ export default function SwapPage() {
               <span>Slippage tolerance</span>
               <span>0.5%</span>
             </div>
-            <div className="flex justify-between text-muted-foreground">
-              <span>Protocol fee</span>
-              <span>
-                0.30% (−{parseFloat(formatUnits(BigInt(quote.protocolFeeAmount), toToken.decimals)).toFixed(4)} {toToken.symbol})
-              </span>
-            </div>
             <div className="flex justify-between font-semibold text-foreground border-t border-border pt-1.5 mt-0.5">
               <span>You receive</span>
               <span className="text-green-400">{outFormatted} {toToken.symbol}</span>
             </div>
             <div className="flex justify-between text-muted-foreground/60">
               <span>Gas cost to you</span>
+              <span className="text-green-400">$0.00</span>
+            </div>
+            <div className="flex justify-between text-muted-foreground/60">
+              <span>Protocol fee</span>
               <span className="text-green-400">$0.00</span>
             </div>
           </div>
@@ -419,7 +421,7 @@ export default function SwapPage() {
         </button>
 
         <p className="text-center text-xs text-muted-foreground">
-          1 signature · 0 ETH · powered by Aerodrome Finance
+          1 signature · 0 ETH · pool-direct · powered by Aerodrome Finance
         </p>
       </div>
 
@@ -428,15 +430,15 @@ export default function SwapPage() {
         <p className="text-foreground font-semibold text-sm mb-1">How gasless swap works</p>
         <div className="flex items-start gap-2">
           <span className="text-primary font-bold mt-px">1.</span>
-          <span>You sign an EIP-2612 permit — authorises the relayer off-chain (no gas, no approval tx)</span>
+          <span>You sign an EIP-3009 authorization — authorises your {fromToken.symbol} to transfer directly to the Aerodrome pool (off-chain, no gas)</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-primary font-bold mt-px">2.</span>
-          <span>BasePay's relayer pulls your tokens, swaps via Aerodrome Finance, and delivers the output — paying all gas</span>
+          <span>BasePay's relayer submits the transfer: your {fromToken.symbol} goes straight to the Aerodrome pool — the relay wallet never holds your tokens</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-green-400 font-bold mt-px">✓</span>
-          <span className="text-green-400">You receive {toToken.symbol} directly in your wallet. Gas: <strong>$0</strong>. Protocol fee: <strong>0.30%</strong></span>
+          <span className="text-green-400">Aerodrome sends {toToken.symbol} directly to your wallet. Gas: <strong>$0</strong>. Protocol fee: <strong>$0</strong></span>
         </div>
       </div>
     </div>

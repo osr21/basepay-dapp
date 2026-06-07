@@ -584,36 +584,36 @@ components:
 
     SwapQuoteResult:
       type: object
-      required: [amountOut, amountOutMin, fee, protocolFeeBps, protocolFeeAmount, amountOutAfterFee]
+      required: [amountOut, amountOutMin, fee, protocolFeeBps, protocolFeeAmount, amountOutAfterFee, poolAddress]
       properties:
         amountOut:
           type: string
-          description: Expected gross output amount in atomic units (before protocol fee)
+          description: Expected output amount in atomic units
         amountOutMin:
           type: string
-          description: Minimum output amount after 1% slippage guard (before protocol fee)
+          description: Minimum output amount after slippage guard
         fee:
           type: integer
           description: Aerodrome pool type indicator (100 = stable pool, 500 = volatile pool)
         protocolFeeBps:
           type: integer
-          description: BasePay protocol fee in basis points (e.g. 30 = 0.30%)
+          description: BasePay protocol fee in basis points (0 = free)
         protocolFeeAmount:
           type: string
-          description: Protocol fee amount in atomic units deducted from amountOut
+          description: Protocol fee amount in atomic units (0 for current version)
         amountOutAfterFee:
           type: string
-          description: Net output amount the user receives after protocol fee
-        relayerAddress:
+          description: Net output amount the user receives (= amountOut when fee is 0)
+        poolAddress:
           type: string
-          description: Relayer wallet address — use as the EIP-2612 permit spender
+          description: Aerodrome pool address — use as the EIP-3009 transferWithAuthorization recipient
         stable:
           type: boolean
           description: Whether the best Aerodrome pool is stable (true) or volatile (false)
 
     SwapInput:
       type: object
-      required: [tokenIn, tokenOut, amountIn, owner, deadline, permitV, permitR, permitS]
+      required: [tokenIn, tokenOut, amountIn, owner, validAfter, validBefore, nonce, v, r, s]
       properties:
         tokenIn:
           type: string
@@ -626,45 +626,45 @@ components:
           description: Input amount in atomic units (6 decimals) as decimal string
         owner:
           type: string
-          description: Wallet address of the token owner (signer of the permit)
-        deadline:
+          description: Wallet address of the token owner (signer of the EIP-3009 authorization)
+        validAfter:
           type: string
-          description: Unix timestamp permit deadline
-        permitV:
+          description: EIP-3009 validAfter Unix timestamp (seconds, decimal string)
+        validBefore:
+          type: string
+          description: EIP-3009 validBefore Unix timestamp (seconds, decimal string)
+        nonce:
+          type: string
+          description: EIP-3009 random nonce (0x-prefixed 32-byte hex)
+        v:
           type: integer
-          description: Permit signature v component
-        permitR:
+          description: Authorization signature v component (27 or 28)
+        r:
           type: string
-          description: Permit signature r component (0x-prefixed 32-byte hex)
-        permitS:
+          description: Authorization signature r component (0x-prefixed 32-byte hex)
+        s:
           type: string
-          description: Permit signature s component (0x-prefixed 32-byte hex)
+          description: Authorization signature s component (0x-prefixed 32-byte hex)
         slippageBps:
           type: integer
           description: Acceptable slippage in basis points (0–100, default 50 = 0.5%)
 
     SwapResult:
       type: object
-      required: [txHash, transferHash, tokenIn, tokenOut, amountIn, amountOutMin, amountOutAfterFee]
+      required: [txHash, tokenIn, tokenOut, amountIn, amountOutAfterFee]
       properties:
         txHash:
           type: string
-          description: On-chain hash of the Aerodrome swap transaction
-        transferHash:
-          type: string
-          description: On-chain hash of the relayer→user output token transfer
+          description: On-chain hash of the Aerodrome pool.swap transaction (output arrives in user wallet from this tx)
         tokenIn:
           type: string
         tokenOut:
           type: string
         amountIn:
           type: string
-        amountOutMin:
-          type: string
-          description: Minimum output enforced on-chain (before protocol fee)
         amountOutAfterFee:
           type: string
-          description: Net amount transferred to the user after 0.30% protocol fee
+          description: Net output amount received directly by the user from the pool
 
     ErrorResponse:
       type: object

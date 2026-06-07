@@ -7,15 +7,11 @@
  */
 
 export interface SwapResult {
-  /** On-chain hash of the Aerodrome swap transaction */
+  /** On-chain hash of the Aerodrome pool.swap transaction (output arrives in user wallet from this tx) */
   txHash: string;
-  /** On-chain hash of the relayer→user output token transfer */
-  transferHash: string;
   tokenIn: string;
   tokenOut: string;
   amountIn: string;
-  /** Minimum output enforced on-chain (before protocol fee) */
-  amountOutMin: string;
-  /** Net amount transferred to the user after 0.30% protocol fee */
+  /** Net output amount received directly by the user from the pool */
   amountOutAfterFee: string;
 }

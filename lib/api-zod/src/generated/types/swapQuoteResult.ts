@@ -7,20 +7,20 @@
  */
 
 export interface SwapQuoteResult {
-  /** Expected gross output amount in atomic units (before protocol fee) */
+  /** Expected output amount in atomic units */
   amountOut: string;
-  /** Minimum output amount after 1% slippage guard (before protocol fee) */
+  /** Minimum output amount after slippage guard */
   amountOutMin: string;
   /** Aerodrome pool type indicator (100 = stable pool, 500 = volatile pool) */
   fee: number;
-  /** BasePay protocol fee in basis points (e.g. 30 = 0.30%) */
+  /** BasePay protocol fee in basis points (0 = free) */
   protocolFeeBps: number;
-  /** Protocol fee amount in atomic units deducted from amountOut */
+  /** Protocol fee amount in atomic units (0 for current version) */
   protocolFeeAmount: string;
-  /** Net output amount the user receives after protocol fee */
+  /** Net output amount the user receives (= amountOut when fee is 0) */
   amountOutAfterFee: string;
-  /** Relayer wallet address — use as the EIP-2612 permit spender */
-  relayerAddress?: string;
+  /** Aerodrome pool address — use as the EIP-3009 transferWithAuthorization recipient */
+  poolAddress: string;
   /** Whether the best Aerodrome pool is stable (true) or volatile (false) */
   stable?: boolean;
 }

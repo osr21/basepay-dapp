@@ -5,22 +5,13 @@ import {
   createPublicClient,
   http,
   parseAbi,
-  concat,
   isAddress,
   isHex,
   type Hex,
-  maxUint256,
 } from "viem";
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import { Attribution } from "ox/erc8021";
 import { z } from "zod";
-
-// ── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
-const _builderCode = process.env.BASE_BUILDER_CODE;
-const DATA_SUFFIX: Hex | undefined = _builderCode
-  ? (Attribution.toDataSuffix({ codes: [_builderCode] }) as Hex)
-  : undefined;
 
 const router = Router();
 
@@ -45,9 +36,6 @@ function getRelayer(): Relayer {
 }
 
 // ── Retry helper for sequencer "in-flight transaction limit" ─────────────────
-// Base RPC enforces max 1 pending tx per sender at a time. Even after
-// waitForTransactionReceipt confirms a tx there is a brief window where the
-// sequencer still considers it in-flight. Retry with linear backoff.
 async function writeWithRetry<T>(
   fn:          () => Promise<T>,
   label:       string,
@@ -59,7 +47,7 @@ async function writeWithRetry<T>(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("in-flight transaction limit") && attempt < maxAttempts - 1) {
-        const delayMs = 1_500 * (attempt + 1); // 1.5 s, 3 s, 4.5 s …
+        const delayMs = 1_500 * (attempt + 1);
         logger.warn({ attempt, delayMs, label }, "in-flight limit — backing off");
         await new Promise(r => setTimeout(r, delayMs));
         continue;
@@ -77,7 +65,6 @@ const AERODROME_FACTORY = "0x420DD381b31aEf6683db6B902084cB0FFECe40Da" as const;
 const AERODROME_ROUTER  = "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43" as const;
 
 // ── Token whitelist ────────────────────────────────────────────────────────────
-// Checksummed addresses for viem; also store lowercase for comparison.
 const USDC    = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 const EURC    = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42" as const;
 const USDC_LC = USDC.toLowerCase();
@@ -92,20 +79,31 @@ function resolveTokens(tokenIn: string, tokenOut: string): TokenPair | null {
   return null;
 }
 
-// ── Protocol fee (0.30% on output) ────────────────────────────────────────────
-const SWAP_FEE_BPS = 30n;
-
 // ── ABIs ──────────────────────────────────────────────────────────────────────
 const ERC20_ABI = parseAbi([
   "function balanceOf(address) external view returns (uint256)",
-  "function allowance(address owner, address spender) external view returns (uint256)",
-  "function approve(address spender, uint256 amount) external returns (bool)",
   "function transfer(address to, uint256 amount) external returns (bool)",
-  "function transferFrom(address from, address to, uint256 amount) external returns (bool)",
-  "function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external",
 ]);
 
-// Aerodrome route struct: { from, to, stable, factory }
+// EIP-3009: FiatToken V2.2 (USDC, EURC)
+const EIP3009_ABI = parseAbi([
+  "function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s) external",
+]);
+
+// Aerodrome factory
+const FACTORY_ABI = parseAbi([
+  "function getPool(address tokenA, address tokenB, bool stable) external view returns (address)",
+]);
+
+// Aerodrome pool (Solidly fork)
+const POOL_ABI = parseAbi([
+  "function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data) external",
+  "function token0() external view returns (address)",
+  "function getAmountOut(uint256 amountIn, address tokenIn) external view returns (uint256)",
+  "function skim(address to) external",
+]);
+
+// Aerodrome router — only used for quotes
 const AERODROME_ROUTER_ABI = [
   {
     type: "function",
@@ -126,33 +124,17 @@ const AERODROME_ROUTER_ABI = [
     ],
     outputs: [{ name: "amounts", type: "uint256[]" }],
   },
-  {
-    type: "function",
-    name: "swapExactTokensForTokens",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "amountIn",     type: "uint256"   },
-      { name: "amountOutMin", type: "uint256"   },
-      {
-        name: "routes",
-        type: "tuple[]",
-        components: [
-          { name: "from",    type: "address" },
-          { name: "to",      type: "address" },
-          { name: "stable",  type: "bool"    },
-          { name: "factory", type: "address" },
-        ],
-      },
-      { name: "to",       type: "address" },
-      { name: "deadline", type: "uint256" },
-    ],
-    outputs: [{ name: "amounts", type: "uint256[]" }],
-  },
 ] as const;
 
-// ── Pool auto-discovery: tries stable + volatile, returns better quote ─────────
-type AeroQuote = { amountOut: bigint; stable: boolean };
-async function getBestAerodromeQuote(
+// ── Rate limit constants ───────────────────────────────────────────────────────
+const MAX_AMOUNT   = 10_000_000_000n; // 10,000 tokens (6 dec)
+const MAX_SLIP_BPS = 100n;            // 1% slippage guard on quote
+
+// ── Pool auto-discovery ────────────────────────────────────────────────────────
+// Tries stable + volatile, returns the pool with the better quote.
+type AeroQuote = { amountOut: bigint; stable: boolean; poolAddress: `0x${string}` };
+
+async function getBestPool(
   tokenIn:  `0x${string}`,
   tokenOut: `0x${string}`,
   amountIn: bigint,
@@ -167,83 +149,56 @@ async function getBestAerodromeQuote(
         args:         [amountIn, [{ from: tokenIn, to: tokenOut, stable, factory: AERODROME_FACTORY }]],
       });
       const amountOut = amounts[1];
+      if (amountOut <= 0n) continue;
+
+      const poolAddress = await publicClient.readContract({
+        address:      AERODROME_FACTORY,
+        abi:          FACTORY_ABI,
+        functionName: "getPool",
+        args:         [tokenIn, tokenOut, stable],
+      });
+      if (!poolAddress || poolAddress === "0x0000000000000000000000000000000000000000") continue;
+
       if (!best || amountOut > best.amountOut) {
-        best = { amountOut, stable };
+        best = { amountOut, stable, poolAddress };
       }
     } catch (err) {
-      logger.debug({ stable, err: err instanceof Error ? err.message : String(err) }, "Aerodrome pool quote failed");
+      logger.debug({ stable, err: err instanceof Error ? err.message : String(err) }, "pool quote failed");
     }
   }
   return best;
 }
 
-// ── Startup: ensure relayer has max approval on both tokens for Aerodrome ──────
-// Called once when the module loads (if DEPLOYER_PRIVATE_KEY is set).
-let _approvalsEnsured = false;
-async function ensureRelayerApprovals(): Promise<void> {
-  if (_approvalsEnsured) return;
-  let relayer: Relayer;
-  try { relayer = getRelayer(); } catch { return; } // key not set — skip
+// ── Validation schemas ────────────────────────────────────────────────────────
+const QuoteSchema = z.object({
+  tokenIn:  z.string().refine(isAddress, "invalid tokenIn"),
+  tokenOut: z.string().refine(isAddress, "invalid tokenOut"),
+  amountIn: z.string().regex(/^\d{1,13}$/, "amountIn must be 1–13 digit integer string"),
+});
 
-  const TOKENS = [USDC, EURC] as const;
-  for (const token of TOKENS) {
-    try {
-      const allowance = await publicClient.readContract({
-        address:      token,
-        abi:          ERC20_ABI,
-        functionName: "allowance",
-        args:         [relayer.account.address, AERODROME_ROUTER],
-      });
-      if (allowance < maxUint256 / 2n) {
-        logger.info({ token }, "Approving Aerodrome router for relayer (one-time setup)");
-        const hash = await relayer.client.writeContract({
-          chain:        base,
-          account:      relayer.account,
-          address:      token,
-          abi:          ERC20_ABI,
-          functionName: "approve",
-          args:         [AERODROME_ROUTER, maxUint256],
-        });
-        await publicClient.waitForTransactionReceipt({ hash, confirmations: 1 });
-        logger.info({ token, hash }, "Aerodrome router approved for relayer");
-      }
-    } catch (err) {
-      logger.warn({ token, err }, "Could not ensure Aerodrome approval — swap execute may fail");
-    }
-  }
-  _approvalsEnsured = true;
-}
-
-// Fire approvals in background on module load
-ensureRelayerApprovals().catch(() => {});
-
-// ── Rate limit constants ───────────────────────────────────────────────────────
-const MAX_AMOUNT   = 10_000_000_000n; // 10,000 tokens (6 dec)
-const MAX_SLIP_BPS = 100n;            // 1% slippage guard on quote
-
-// ── Validation schema ─────────────────────────────────────────────────────────
 const SwapSchema = z.object({
   tokenIn:     z.string().refine(isAddress, "invalid tokenIn address"),
   tokenOut:    z.string().refine(isAddress, "invalid tokenOut address"),
   amountIn:    z.string().regex(/^\d{1,13}$/, "amountIn must be 1–13 digit integer string"),
   owner:       z.string().refine(isAddress, "invalid owner address"),
-  deadline:    z.string().regex(/^\d{1,12}$/, "deadline must be unix timestamp"),
-  permitV:     z.number().int().min(27).max(28),
-  permitR:     z.string().refine((v: string) => isHex(v) && v.length === 66, "permitR must be 0x-prefixed 32-byte hex"),
-  permitS:     z.string().refine((v: string) => isHex(v) && v.length === 66, "permitS must be 0x-prefixed 32-byte hex"),
+  // EIP-3009 authorization
+  validAfter:  z.string().regex(/^\d{1,12}$/, "validAfter must be unix timestamp string"),
+  validBefore: z.string().regex(/^\d{1,12}$/, "validBefore must be unix timestamp string"),
+  nonce:       z.string().refine((v: string) => isHex(v) && v.length === 66, "nonce must be 0x-prefixed 32-byte hex"),
+  v:           z.number().int().min(27).max(28),
+  r:           z.string().refine((v: string) => isHex(v) && v.length === 66, "r must be 0x-prefixed 32-byte hex"),
+  s:           z.string().refine((v: string) => isHex(v) && v.length === 66, "s must be 0x-prefixed 32-byte hex"),
   slippageBps: z.number().int().min(0).max(100).optional(),
 });
 
 // ── GET /api/swap/quote ───────────────────────────────────────────────────────
 router.get("/swap/quote", async (req, res) => {
-  const { tokenIn, tokenOut, amountIn } = req.query as Record<string, string | undefined>;
+  const parsed = QuoteSchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid query params" });
+  }
+  const { tokenIn, tokenOut, amountIn } = parsed.data;
 
-  if (!tokenIn || !tokenOut || !amountIn) {
-    return res.status(400).json({ error: "tokenIn, tokenOut, amountIn are required" });
-  }
-  if (!isAddress(tokenIn) || !isAddress(tokenOut)) {
-    return res.status(400).json({ error: "Invalid token address" });
-  }
   const pair = resolveTokens(tokenIn, tokenOut);
   if (!pair) {
     return res.status(400).json({ error: "Only USDC↔EURC swaps are supported" });
@@ -257,76 +212,70 @@ router.get("/swap/quote", async (req, res) => {
     return res.status(400).json({ error: "amountIn out of range (1 – 10,000 tokens)" });
   }
 
-  const best = await getBestAerodromeQuote(pair.tokenIn, pair.tokenOut, amountBig);
+  const best = await getBestPool(pair.tokenIn, pair.tokenOut, amountBig);
   if (!best) {
     req.log.warn({ tokenIn: pair.tokenIn, tokenOut: pair.tokenOut, amountIn }, "no Aerodrome pool found");
     return res.status(503).json({ error: "No liquid pool found for this pair — try a smaller amount" });
   }
 
-  const { amountOut, stable } = best;
-  const amountOutMin      = (amountOut * (10_000n - MAX_SLIP_BPS)) / 10_000n;
-  const protocolFeeAmount = (amountOut * SWAP_FEE_BPS) / 10_000n;
-  const amountOutAfterFee = amountOut - protocolFeeAmount;
+  const { amountOut, stable, poolAddress } = best;
+  const amountOutMin = (amountOut * (10_000n - MAX_SLIP_BPS)) / 10_000n;
 
-  // Expose relayer address so the frontend can use it as the permit spender
-  let relayerAddress: string | undefined;
-  try { relayerAddress = getRelayer().account.address; } catch { /* key not set */ }
-
-  req.log.info({ stable, amountOut: amountOut.toString() }, "Aerodrome swap quote");
+  req.log.info({ stable, poolAddress, amountOut: amountOut.toString() }, "Aerodrome swap quote");
 
   return res.json({
     amountOut:         amountOut.toString(),
     amountOutMin:      amountOutMin.toString(),
-    fee:               stable ? 100 : 500, // Aerodrome pool type indicator
-    protocolFeeBps:    Number(SWAP_FEE_BPS),
-    protocolFeeAmount: protocolFeeAmount.toString(),
-    amountOutAfterFee: amountOutAfterFee.toString(),
-    relayerAddress,
+    fee:               stable ? 100 : 500,
+    protocolFeeBps:    0,
+    protocolFeeAmount: "0",
+    amountOutAfterFee: amountOut.toString(),
+    poolAddress,
     stable,
   });
 });
 
 // ── POST /api/swap/execute ────────────────────────────────────────────────────
-// Gasless swap via Aerodrome — 4 relayer transactions:
-//   TX1: token.permit(user, relayer, amountIn)          — submit off-chain permit
-//   TX2: token.transferFrom(user, relayer, amountIn)    — pull full amount to relayer
-//   TX3 (conditional): token.approve(aerodromeRouter)   — ensure spending approval
-//   TX4: aerodromeRouter.swapExactTokensForTokens(...)  — swap (amountIn - fee) directly to user
+// Gasless swap via direct Aerodrome pool interaction — 2 relayer transactions:
 //
-// Protocol fee (0.30%) is taken on the INPUT: the relayer keeps `protocolFeeAmount`
-// of tokenIn and swaps `amountIn - protocolFeeAmount` directly to the user via
-// Aerodrome.  The user receives tokenOut directly from Aerodrome — no intermediate
-// relayer transfer step.
+//   TX1: token.transferWithAuthorization(from=user, to=pool, value=amountIn, ...)
+//        → input tokens move directly from user wallet to the Aerodrome pool.
+//          The relay wallet never holds the input tokens.
 //
-// Error handling:
-//   - TX1/TX2 failure     → return error (no funds moved from user yet / can refund)
-//   - TX4 submit failure  → refund amountIn to user (swap never mined)
-//   - TX4 reverted        → refund amountIn to user (Aerodrome reverted, funds back in relayer)
-//   - TX4 receipt timeout → return txHash + warning — do NOT refund (user may have already
-//                           received tokenOut; refunding here would double-pay them)
+//   TX2: pool.swap(amount0Out, amount1Out, to=user, data="0x")
+//        → output tokens move directly from the Aerodrome pool to the user wallet.
+//          The relay wallet never holds the output tokens.
+//
+// Error recovery:
+//   - TX1 failure  → return error; user's funds never left their wallet.
+//   - TX2 failure after TX1 → attempt pool.skim(relayer) to recover the deposited
+//     tokens from the pool's excess balance, then refund user. If skim fails (e.g.
+//     another tx consumed the excess), log and return error — operator must resolve.
 router.post("/swap/execute", async (req, res) => {
   const parsed = SwapSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
   }
-  const { tokenIn, tokenOut, amountIn, owner, deadline, permitV, permitR, permitS, slippageBps } = parsed.data;
+  const { tokenIn, tokenOut, amountIn, owner, validAfter, validBefore, nonce, v, r, s, slippageBps } = parsed.data;
 
   const pair = resolveTokens(tokenIn, tokenOut);
   if (!pair) {
     return res.status(400).json({ error: "Only USDC↔EURC swaps are supported" });
   }
 
-  const amountBig   = BigInt(amountIn);
-  const deadlineBig = BigInt(deadline);
+  const amountBig      = BigInt(amountIn);
+  const validAfterBig  = BigInt(validAfter);
+  const validBeforeBig = BigInt(validBefore);
+  const nowSeconds     = BigInt(Math.floor(Date.now() / 1000));
 
   if (amountBig <= 0n || amountBig > MAX_AMOUNT) {
     return res.status(400).json({ error: "amountIn out of range" });
   }
-  if (deadlineBig < BigInt(Math.floor(Date.now() / 1000))) {
-    return res.status(400).json({ error: "Permit deadline has expired" });
+  if (validBeforeBig < nowSeconds) {
+    return res.status(400).json({ error: "EIP-3009 authorization has expired (validBefore is in the past)" });
   }
 
-  // Check sender balance
+  // Verify sender balance
   const balance = await publicClient.readContract({
     address:      pair.tokenIn,
     abi:          ERC20_ABI,
@@ -337,193 +286,102 @@ router.post("/swap/execute", async (req, res) => {
     return res.status(400).json({ error: "Insufficient token balance" });
   }
 
-  // ── Protocol fee on input ─────────────────────────────────────────────────
-  // Relayer keeps protocolFeeAmount of tokenIn; remaining amountToSwap goes
-  // through Aerodrome directly to the user (no extra transfer tx needed).
-  const protocolFeeAmount = (amountBig * SWAP_FEE_BPS) / 10_000n;
-  const amountToSwap      = amountBig - protocolFeeAmount;
-  if (amountToSwap <= 0n) {
-    return res.status(400).json({ error: "Amount too small after protocol fee" });
-  }
-
-  // Fresh quote for the net amount to be swapped
-  const freshQuote = await getBestAerodromeQuote(pair.tokenIn, pair.tokenOut, amountToSwap);
-  if (!freshQuote) {
+  // Find best pool and get initial quote for slippage reference
+  const best = await getBestPool(pair.tokenIn, pair.tokenOut, amountBig);
+  if (!best) {
     return res.status(503).json({ error: "Could not get swap quote — no liquid pool found" });
   }
+  const { poolAddress, stable: poolStable } = best;
   const slipBps      = BigInt(slippageBps ?? 50);
-  const amountOutMin = (freshQuote.amountOut * (10_000n - slipBps)) / 10_000n;
-  const poolStable   = freshQuote.stable;
+  const amountOutMin = (best.amountOut * (10_000n - slipBps)) / 10_000n;
+
+  // Determine token0/token1 ordering for pool.swap output amounts
+  // (Solidly pools sort tokens by address; lower address = token0)
+  const token0 = await publicClient.readContract({
+    address:      poolAddress,
+    abi:          POOL_ABI,
+    functionName: "token0",
+  });
+  const isToken0In = pair.tokenIn.toLowerCase() === token0.toLowerCase();
+  // If tokenIn = token0 → output is token1 → amount0Out=0, amount1Out=X
+  // If tokenIn = token1 → output is token0 → amount0Out=X, amount1Out=0
 
   let relayer: Relayer;
   try { relayer = getRelayer(); } catch {
     return res.status(500).json({ error: "Relayer not configured" });
   }
 
-  // ── TX 1: submit EIP-2612 permit ─────────────────────────────────────────
-  let permitHash: Hex;
+  // ── TX 1: transferWithAuthorization(user → pool) ──────────────────────────
+  // USDC/EURC move directly from the user's wallet to the Aerodrome pool.
+  // The relay wallet signs and pays gas but never holds the tokens.
+  let twaHash: Hex;
   try {
-    permitHash = await writeWithRetry(
+    twaHash = await writeWithRetry(
       () => relayer.client.writeContract({
         chain:        base,
         account:      relayer.account,
         address:      pair.tokenIn,
-        abi:          ERC20_ABI,
-        functionName: "permit",
+        abi:          EIP3009_ABI,
+        functionName: "transferWithAuthorization",
         args:         [
           owner as `0x${string}`,
-          relayer.account.address,
+          poolAddress,
           amountBig,
-          deadlineBig,
-          permitV,
-          permitR as `0x${string}`,
-          permitS as `0x${string}`,
+          validAfterBig,
+          validBeforeBig,
+          nonce as `0x${string}`,
+          v,
+          r as `0x${string}`,
+          s as `0x${string}`,
         ],
       }),
-      "TX1 permit",
+      "TX1 transferWithAuthorization",
     );
-    const permitReceipt = await publicClient.waitForTransactionReceipt({ hash: permitHash, confirmations: 1 });
-    if (permitReceipt.status !== "success") {
-      req.log.error({ permitHash, status: permitReceipt.status }, "swap TX1 (permit) reverted");
+    const twaReceipt = await publicClient.waitForTransactionReceipt({ hash: twaHash, confirmations: 1 });
+    if (twaReceipt.status !== "success") {
+      req.log.error({ twaHash, status: twaReceipt.status }, "swap TX1 (transferWithAuthorization) reverted");
       return res.status(400).json({
-        error: "Permit was rejected by the token contract — the permit signature may be invalid or expired.",
-        permitHash,
+        error: "Authorization rejected by token contract — signature may be invalid, expired, or nonce already used.",
       });
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message.slice(0, 150) : "Permit failed";
-    req.log.error({ err }, "swap TX1 (permit) failed");
-    return res.status(500).json({ error: `Permit failed: ${msg}` });
+    const msg = err instanceof Error ? err.message.slice(0, 200) : "Transfer authorization failed";
+    req.log.error({ err }, "swap TX1 (transferWithAuthorization) failed");
+    // TX1 failed → user's tokens never moved, safe to return error
+    return res.status(500).json({ error: `Transfer failed: ${msg}` });
   }
 
-  // Belt-and-suspenders: verify allowance before pulling
-  const allowanceAfterPermit = await publicClient.readContract({
-    address:      pair.tokenIn,
-    abi:          ERC20_ABI,
-    functionName: "allowance",
-    args:         [owner as `0x${string}`, relayer.account.address],
-  });
-  if (allowanceAfterPermit < amountBig) {
-    req.log.error(
-      { allowanceAfterPermit: allowanceAfterPermit.toString(), amountIn, permitHash },
-      "permit mined but allowance not set",
-    );
-    return res.status(400).json({
-      error: "Permit was accepted on-chain but did not grant the expected allowance.",
-      permitHash,
-    });
-  }
-
-  // ── TX 2: pull tokens from user to relayer ────────────────────────────────
-  let pullHash: Hex;
+  // Refresh amountOut from pool immediately before TX2 to account for any
+  // price movement since the quote was fetched.
+  let freshAmountOut: bigint;
   try {
-    pullHash = await writeWithRetry(
-      () => relayer.client.writeContract({
-        chain:        base,
-        account:      relayer.account,
-        address:      pair.tokenIn,
-        abi:          ERC20_ABI,
-        functionName: "transferFrom",
-        args:         [owner as `0x${string}`, relayer.account.address, amountBig],
-      }),
-      "TX2 transferFrom",
-    );
-    const pullReceipt = await publicClient.waitForTransactionReceipt({ hash: pullHash, confirmations: 1 });
-    if (pullReceipt.status !== "success") {
-      req.log.error({ pullHash, permitHash, status: pullReceipt.status }, "swap TX2 (transferFrom) reverted");
-      return res.status(500).json({ error: "Token pull reverted on-chain after permit succeeded. Contact support.", permitHash, pullHash });
-    }
-  } catch (err) {
-    req.log.error({ err, permitHash }, "swap TX2 (transferFrom) failed");
-    return res.status(500).json({ error: "Token pull failed after permit succeeded. Contact support.", permitHash });
+    freshAmountOut = await publicClient.readContract({
+      address:      poolAddress,
+      abi:          POOL_ABI,
+      functionName: "getAmountOut",
+      args:         [amountBig, pair.tokenIn],
+    });
+  } catch {
+    freshAmountOut = best.amountOut; // fall back to original quote
   }
 
-  // ── TX 3 (conditional): ensure Aerodrome router approval ─────────────────
-  let needsApprove = true;
-  try {
-    const currentAllowance = await publicClient.readContract({
-      address:      pair.tokenIn,
-      abi:          ERC20_ABI,
-      functionName: "allowance",
-      args:         [relayer.account.address, AERODROME_ROUTER],
-    });
-    needsApprove = currentAllowance < amountToSwap;
-  } catch (readErr) {
-    req.log.warn({ readErr }, "Could not read Aerodrome allowance — will approve inline to be safe");
-  }
-  if (needsApprove) {
+  // Slippage guard: if price moved too much after TX1, skim tokens back and abort
+  if (freshAmountOut < amountOutMin) {
+    req.log.warn(
+      { freshAmountOut: freshAmountOut.toString(), amountOutMin: amountOutMin.toString(), twaHash },
+      "slippage exceeded post-TX1 — attempting skim + refund",
+    );
     try {
-      req.log.info({ token: pair.tokenIn }, "Approving Aerodrome router inline");
-      const approveHash = await writeWithRetry(
+      const skimHash = await writeWithRetry(
         () => relayer.client.writeContract({
-          chain:        base,
-          account:      relayer.account,
-          address:      pair.tokenIn,
-          abi:          ERC20_ABI,
-          functionName: "approve",
-          args:         [AERODROME_ROUTER, maxUint256],
+          chain: base, account: relayer.account,
+          address: poolAddress, abi: POOL_ABI,
+          functionName: "skim",
+          args: [relayer.account.address],
         }),
-        "TX3 approve",
+        "slippage-recovery skim",
       );
-      await publicClient.waitForTransactionReceipt({ hash: approveHash, confirmations: 1 });
-    } catch (err) {
-      req.log.error({ err, permitHash, pullHash }, "Inline approve failed — must refund user");
-      try {
-        const refundHash = await writeWithRetry(
-          () => relayer.client.writeContract({
-            chain: base, account: relayer.account,
-            address: pair.tokenIn, abi: ERC20_ABI,
-            functionName: "transfer",
-            args: [owner as `0x${string}`, amountBig],
-          }),
-          "TX3-recovery refund",
-        );
-        req.log.info({ refundHash }, "refunded user after approve failure");
-        return res.status(500).json({ error: "Could not approve Aerodrome router — tokens refunded.", refundHash });
-      } catch (refErr) {
-        req.log.error({ refErr }, "TX3 refund also failed — tokens stuck with relayer");
-      }
-      return res.status(500).json({ error: "Could not approve Aerodrome router — swap aborted. Contact support.", permitHash, pullHash });
-    }
-  }
-
-  // ── TX 4: swap amountToSwap directly to user via Aerodrome ───────────────
-  // Re-fetch quote immediately before swap — TX1+TX2 can take 10–20 s.
-  let swapAmountOutMin = amountOutMin;
-  try {
-    const preSwapQuote = await getBestAerodromeQuote(pair.tokenIn, pair.tokenOut, amountToSwap);
-    if (preSwapQuote) {
-      swapAmountOutMin = (preSwapQuote.amountOut * (10_000n - slipBps)) / 10_000n;
-    }
-    req.log.info(
-      { original: amountOutMin.toString(), fresh: swapAmountOutMin.toString() },
-      "pre-swap quote refresh",
-    );
-  } catch (qErr) {
-    req.log.warn({ qErr }, "pre-swap quote refresh failed — using original amountOutMin");
-  }
-
-  const routes = [{ from: pair.tokenIn, to: pair.tokenOut, stable: poolStable, factory: AERODROME_FACTORY }];
-
-  // Step A: submit the swap transaction
-  let swapHash: Hex;
-  try {
-    swapHash = await writeWithRetry(
-      () => relayer.client.writeContract({
-        chain:        base,
-        account:      relayer.account,
-        address:      AERODROME_ROUTER,
-        abi:          AERODROME_ROUTER_ABI,
-        functionName: "swapExactTokensForTokens" as const,
-        // Output goes directly to `owner` — no intermediate relay transfer needed.
-        args:         [amountToSwap, swapAmountOutMin, routes, owner as `0x${string}`, deadlineBig] as const,
-      }),
-      "TX4 swap",
-    );
-  } catch (submitErr) {
-    // Failed to submit — swap never mined, tokens still in relayer → safe to refund.
-    req.log.error({ err: submitErr, permitHash, pullHash }, "swap TX4 submit failed — refunding");
-    try {
+      await publicClient.waitForTransactionReceipt({ hash: skimHash, confirmations: 1 });
       const refundHash = await writeWithRetry(
         () => relayer.client.writeContract({
           chain: base, account: relayer.account,
@@ -531,121 +389,134 @@ router.post("/swap/execute", async (req, res) => {
           functionName: "transfer",
           args: [owner as `0x${string}`, amountBig],
         }),
-        "TX4-submit-recovery refund",
+        "slippage-recovery refund",
       );
-      req.log.info({ refundHash, owner, amountIn }, "refunded user after TX4 submit failure");
-      return res.status(500).json({ error: "Swap failed — your tokens have been refunded.", refundHash, permitHash, pullHash });
-    } catch (refundErr) {
-      req.log.error({ refundErr, owner, amountIn }, "refund after TX4 submit failure also failed — tokens stuck with relayer");
+      req.log.info({ refundHash, twaHash }, "refunded user after slippage abort");
+      return res.status(400).json({
+        error: "Price moved too much since quote — your tokens have been refunded.",
+        refundHash,
+      });
+    } catch (recErr) {
+      req.log.error({ recErr, twaHash }, "slippage recovery failed — tokens may be stuck in pool");
+      return res.status(500).json({
+        error: "Slippage too high and recovery failed — contact support with your transaction hash.",
+        twaHash,
+      });
     }
-    const raw = submitErr instanceof Error ? submitErr.message : "Swap failed";
-    return res.status(500).json({ error: `Swap failed: ${raw.slice(0, 150)}. Contact support — tokens may be held by relayer.`, permitHash, pullHash });
   }
 
-  // Step B: wait for confirmation.
-  // IMPORTANT: if the receipt check throws (RPC/network error) we do NOT refund.
-  // Since output goes directly to the user in the swap call, refunding here would
-  // double-pay the user if the swap already executed.  Return the hash so the
-  // user can verify on Basescan.
+  // ── TX 2: pool.swap(→ user) ───────────────────────────────────────────────
+  // Output tokens move directly from pool to user wallet.
+  const amount0Out = isToken0In ? 0n : freshAmountOut;
+  const amount1Out = isToken0In ? freshAmountOut : 0n;
+
+  let swapHash: Hex;
   try {
-    const swapReceipt = await publicClient.waitForTransactionReceipt({ hash: swapHash, confirmations: 1 });
-    if (swapReceipt.status !== "success") {
-      // Swap reverted on-chain — Aerodrome returned tokens to relayer → safe to refund.
-      req.log.error({ swapHash, permitHash, pullHash }, "swap TX4 reverted on-chain — refunding");
-      try {
-        const refundHash = await writeWithRetry(
-          () => relayer.client.writeContract({
-            chain: base, account: relayer.account,
-            address: pair.tokenIn, abi: ERC20_ABI,
-            functionName: "transfer",
-            args: [owner as `0x${string}`, amountBig],
-          }),
-          "TX4-revert-recovery refund",
-        );
-        req.log.info({ refundHash, owner, amountIn }, "refunded user after TX4 revert");
-        return res.status(500).json({ error: "Swap reverted — your tokens have been refunded.", refundHash, swapHash, permitHash, pullHash });
-      } catch (refundErr) {
-        req.log.error({ refundErr, owner, amountIn }, "refund after TX4 revert also failed — tokens stuck with relayer");
-      }
-      return res.status(500).json({ error: "Swap reverted and refund failed. Contact support — tokens may be held by relayer.", swapHash, permitHash, pullHash });
-    }
-  } catch (receiptErr) {
-    // Network/RPC error reading receipt.  The swap may have already executed and
-    // the user may have received their tokens.  Do NOT attempt a refund.
-    req.log.warn({ receiptErr, swapHash, owner }, "swap TX4 receipt check failed — returning hash for user verification");
-    return res.status(202).json({
-      txHash:           swapHash,
-      warning:          "Swap submitted but confirmation timed out. Your tokens may already be in your wallet — check the transaction on Basescan.",
-      amountOutAfterFee: swapAmountOutMin.toString(),
-      tokenIn:          pair.tokenIn,
-      tokenOut:         pair.tokenOut,
-      amountIn,
-    });
-  }
-
-  req.log.info(
-    { permitHash, pullHash, swapHash, owner, tokenIn: pair.tokenIn, tokenOut: pair.tokenOut, amountIn, amountToSwap: amountToSwap.toString(), protocolFeeAmount: protocolFeeAmount.toString() },
-    "gasless swap completed",
-  );
-
-  return res.json({
-    txHash:            swapHash,
-    tokenIn:           pair.tokenIn,
-    tokenOut:          pair.tokenOut,
-    amountIn,
-    amountOutAfterFee: swapAmountOutMin.toString(),
-  });
-});
-
-
-// ── One-time recovery: send stuck USDC from relayer back to recipient ─────────
-// POST /api/swap/recover  { recipient, amountUsdc }
-// Requires X-Recovery-Secret header matching SESSION_SECRET.
-router.post("/swap/recover", async (req, res) => {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret || req.headers["x-recovery-secret"] !== secret) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const parsed = z.object({
-    recipient:   z.string().refine(isAddress, "invalid address"),
-    amountUsdc:  z.number().int().positive().max(100_000_000), // max 100 USDC safety cap
-  }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues });
-
-  const { recipient, amountUsdc } = parsed.data;
-  const amountMicro = BigInt(amountUsdc) * 1_000_000n; // 1 USDC = 1e6 micro
-
-  let relayer: Relayer;
-  try { relayer = getRelayer(); } catch { return res.status(503).json({ error: "Relayer not configured" }); }
-
-  // Sanity: check relayer balance
-  const bal = await publicClient.readContract({
-    address: USDC, abi: ERC20_ABI, functionName: "balanceOf",
-    args: [relayer.account.address],
-  });
-  if (bal < amountMicro) {
-    return res.status(400).json({ error: `Relayer only has ${bal.toString()} micro-USDC`, balance: bal.toString() });
-  }
-
-  try {
-    const hash = await writeWithRetry(
+    swapHash = await writeWithRetry(
       () => relayer.client.writeContract({
         chain:        base,
         account:      relayer.account,
-        address:      USDC,
-        abi:          ERC20_ABI,
-        functionName: "transfer",
-        args:         [recipient as `0x${string}`, amountMicro],
+        address:      poolAddress,
+        abi:          POOL_ABI,
+        functionName: "swap",
+        args:         [amount0Out, amount1Out, owner as `0x${string}`, "0x"],
       }),
-      "recovery transfer",
+      "TX2 pool.swap",
     );
-    req.log.info({ hash, recipient, amountMicro: amountMicro.toString() }, "recovery transfer sent");
-    return res.json({ hash, recipient, amountMicro: amountMicro.toString() });
-  } catch (err) {
-    req.log.error({ err }, "recovery transfer failed");
-    return res.status(500).json({ error: err instanceof Error ? err.message : "Transfer failed" });
+  } catch (submitErr) {
+    // TX2 failed to submit — USDC is in pool but swap not mined → try to recover via skim
+    req.log.error({ err: submitErr, twaHash }, "swap TX2 submit failed — attempting skim recovery");
+    try {
+      const skimHash = await writeWithRetry(
+        () => relayer.client.writeContract({
+          chain: base, account: relayer.account,
+          address: poolAddress, abi: POOL_ABI,
+          functionName: "skim",
+          args: [relayer.account.address],
+        }),
+        "TX2-submit-recovery skim",
+      );
+      await publicClient.waitForTransactionReceipt({ hash: skimHash, confirmations: 1 });
+      const refundHash = await writeWithRetry(
+        () => relayer.client.writeContract({
+          chain: base, account: relayer.account,
+          address: pair.tokenIn, abi: ERC20_ABI,
+          functionName: "transfer",
+          args: [owner as `0x${string}`, amountBig],
+        }),
+        "TX2-submit-recovery refund",
+      );
+      req.log.info({ refundHash, twaHash }, "refunded user after TX2 submit failure");
+      return res.status(500).json({ error: "Swap could not be submitted — your tokens have been refunded.", refundHash });
+    } catch (recErr) {
+      req.log.error({ recErr, twaHash }, "TX2 submit recovery failed — tokens may be in pool");
+    }
+    return res.status(500).json({
+      error: "Swap failed — contact support with your transaction hash.",
+      twaHash,
+    });
   }
+
+  // Wait for receipt
+  let swapReceipt: Awaited<ReturnType<typeof publicClient.waitForTransactionReceipt>>;
+  try {
+    swapReceipt = await publicClient.waitForTransactionReceipt({ hash: swapHash, confirmations: 1, timeout: 90_000 });
+  } catch (receiptErr) {
+    // Receipt timeout — swap may have already mined. Return txHash. Do NOT attempt refund.
+    req.log.error({ err: receiptErr, swapHash, twaHash }, "TX2 receipt timeout — returning txHash");
+    return res.status(200).json({
+      txHash:           swapHash,
+      tokenIn,
+      tokenOut,
+      amountIn,
+      amountOutAfterFee: freshAmountOut.toString(),
+      warning:          "Swap submitted but receipt timed out — please verify on BaseScan",
+    });
+  }
+
+  if (swapReceipt.status !== "success") {
+    // pool.swap reverted — try to skim the deposited tokens back
+    req.log.error({ swapHash, twaHash, status: swapReceipt.status }, "TX2 (pool.swap) reverted");
+    try {
+      const skimHash = await writeWithRetry(
+        () => relayer.client.writeContract({
+          chain: base, account: relayer.account,
+          address: poolAddress, abi: POOL_ABI,
+          functionName: "skim",
+          args: [relayer.account.address],
+        }),
+        "TX2-revert-recovery skim",
+      );
+      await publicClient.waitForTransactionReceipt({ hash: skimHash, confirmations: 1 });
+      const refundHash = await writeWithRetry(
+        () => relayer.client.writeContract({
+          chain: base, account: relayer.account,
+          address: pair.tokenIn, abi: ERC20_ABI,
+          functionName: "transfer",
+          args: [owner as `0x${string}`, amountBig],
+        }),
+        "TX2-revert-recovery refund",
+      );
+      req.log.info({ refundHash, swapHash, twaHash }, "refunded user after TX2 revert");
+      return res.status(500).json({ error: "Swap reverted on-chain — your tokens have been refunded.", refundHash });
+    } catch (recErr) {
+      req.log.error({ recErr, swapHash, twaHash }, "TX2 revert recovery failed");
+    }
+    return res.status(500).json({ error: "Swap reverted — contact support.", swapHash, twaHash });
+  }
+
+  req.log.info(
+    { swapHash, twaHash, amountIn, amountOut: freshAmountOut.toString(), owner, stable: poolStable },
+    "gasless swap complete — relay wallet never held user tokens",
+  );
+
+  return res.json({
+    txHash:           swapHash,
+    tokenIn,
+    tokenOut,
+    amountIn,
+    amountOutAfterFee: freshAmountOut.toString(),
+  });
 });
 
 export default router;

@@ -177,20 +177,20 @@ export interface GaslessTransferResult {
 }
 
 export interface SwapQuoteResult {
-  /** Expected gross output amount in atomic units (before protocol fee) */
+  /** Expected output amount in atomic units */
   amountOut: string;
-  /** Minimum output amount after 1% slippage guard (before protocol fee) */
+  /** Minimum output amount after slippage guard */
   amountOutMin: string;
   /** Aerodrome pool type indicator (100 = stable pool, 500 = volatile pool) */
   fee: number;
-  /** BasePay protocol fee in basis points (e.g. 30 = 0.30%) */
+  /** BasePay protocol fee in basis points (0 = free) */
   protocolFeeBps: number;
-  /** Protocol fee amount in atomic units deducted from amountOut */
+  /** Protocol fee amount in atomic units (0 for current version) */
   protocolFeeAmount: string;
-  /** Net output amount the user receives after protocol fee */
+  /** Net output amount the user receives (= amountOut when fee is 0) */
   amountOutAfterFee: string;
-  /** Relayer wallet address — use as the EIP-2612 permit spender */
-  relayerAddress?: string;
+  /** Aerodrome pool address — use as the EIP-3009 transferWithAuthorization recipient */
+  poolAddress: string;
   /** Whether the best Aerodrome pool is stable (true) or volatile (false) */
   stable?: boolean;
 }
@@ -202,31 +202,31 @@ export interface SwapInput {
   tokenOut: string;
   /** Input amount in atomic units (6 decimals) as decimal string */
   amountIn: string;
-  /** Wallet address of the token owner (signer of the permit) */
+  /** Wallet address of the token owner (signer of the EIP-3009 authorization) */
   owner: string;
-  /** Unix timestamp permit deadline */
-  deadline: string;
-  /** Permit signature v component */
-  permitV: number;
-  /** Permit signature r component (0x-prefixed 32-byte hex) */
-  permitR: string;
-  /** Permit signature s component (0x-prefixed 32-byte hex) */
-  permitS: string;
+  /** EIP-3009 validAfter Unix timestamp (seconds, decimal string) */
+  validAfter: string;
+  /** EIP-3009 validBefore Unix timestamp (seconds, decimal string) */
+  validBefore: string;
+  /** EIP-3009 random nonce (0x-prefixed 32-byte hex) */
+  nonce: string;
+  /** Authorization signature v component (27 or 28) */
+  v: number;
+  /** Authorization signature r component (0x-prefixed 32-byte hex) */
+  r: string;
+  /** Authorization signature s component (0x-prefixed 32-byte hex) */
+  s: string;
   /** Acceptable slippage in basis points (0–100, default 50 = 0.5%) */
   slippageBps?: number;
 }
 
 export interface SwapResult {
-  /** On-chain hash of the Aerodrome swap transaction */
+  /** On-chain hash of the Aerodrome pool.swap transaction (output arrives in user wallet from this tx) */
   txHash: string;
-  /** On-chain hash of the relayer→user output token transfer */
-  transferHash: string;
   tokenIn: string;
   tokenOut: string;
   amountIn: string;
-  /** Minimum output enforced on-chain (before protocol fee) */
-  amountOutMin: string;
-  /** Net amount transferred to the user after 0.30% protocol fee */
+  /** Net output amount received directly by the user from the pool */
   amountOutAfterFee: string;
 }
 

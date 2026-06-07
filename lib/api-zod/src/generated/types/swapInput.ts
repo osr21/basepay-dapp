@@ -13,16 +13,20 @@ export interface SwapInput {
   tokenOut: string;
   /** Input amount in atomic units (6 decimals) as decimal string */
   amountIn: string;
-  /** Wallet address of the token owner (signer of the permit) */
+  /** Wallet address of the token owner (signer of the EIP-3009 authorization) */
   owner: string;
-  /** Unix timestamp permit deadline */
-  deadline: string;
-  /** Permit signature v component */
-  permitV: number;
-  /** Permit signature r component (0x-prefixed 32-byte hex) */
-  permitR: string;
-  /** Permit signature s component (0x-prefixed 32-byte hex) */
-  permitS: string;
+  /** EIP-3009 validAfter Unix timestamp (seconds, decimal string) */
+  validAfter: string;
+  /** EIP-3009 validBefore Unix timestamp (seconds, decimal string) */
+  validBefore: string;
+  /** EIP-3009 random nonce (0x-prefixed 32-byte hex) */
+  nonce: string;
+  /** Authorization signature v component (27 or 28) */
+  v: number;
+  /** Authorization signature r component (0x-prefixed 32-byte hex) */
+  r: string;
+  /** Authorization signature s component (0x-prefixed 32-byte hex) */
+  s: string;
   /** Acceptable slippage in basis points (0–100, default 50 = 0.5%) */
   slippageBps?: number;
 }

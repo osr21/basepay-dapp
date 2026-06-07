@@ -549,7 +549,7 @@ router.post("/swap/execute", async (req, res) => {
     tokenIn:          pair.tokenIn,
     tokenOut:         pair.tokenOut,
     amountIn,
-    amountOutMin:     amountOutMin.toString(),
+    amountOutMin:     swapAmountOutMin.toString(),
     amountOutAfterFee: userAmount.toString(),
   });
 });

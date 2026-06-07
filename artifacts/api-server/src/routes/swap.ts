@@ -425,13 +425,23 @@ router.post("/swap/execute", async (req, res) => {
   }
 
   // ── TX 3 (conditional): ensure relayer has approved Aerodrome router ─────────
-  const currentAllowance = await publicClient.readContract({
-    address:      pair.tokenIn,
-    abi:          ERC20_ABI,
-    functionName: "allowance",
-    args:         [relayer.account.address, AERODROME_ROUTER],
-  });
-  if (currentAllowance < amountBig) {
+  // Wrap the allowance read in try-catch: the public Base RPC can return 5xx
+  // transiently, and an uncaught throw here would strand the user's tokens
+  // (already pulled in TX2) with no refund path.  If we can't read the
+  // allowance, err on the side of sending an approve — it's idempotent.
+  let needsApprove = true;
+  try {
+    const currentAllowance = await publicClient.readContract({
+      address:      pair.tokenIn,
+      abi:          ERC20_ABI,
+      functionName: "allowance",
+      args:         [relayer.account.address, AERODROME_ROUTER],
+    });
+    needsApprove = currentAllowance < amountBig;
+  } catch (readErr) {
+    req.log.warn({ readErr }, "Could not read Aerodrome allowance — will approve inline to be safe");
+  }
+  if (needsApprove) {
     try {
       req.log.info({ token: pair.tokenIn }, "Approving Aerodrome router inline");
       const approveHash = await writeWithRetry(
@@ -468,6 +478,20 @@ router.post("/swap/execute", async (req, res) => {
     );
   } catch (qErr) {
     req.log.warn({ qErr }, "pre-swap quote refresh failed — using original amountOutMin");
+  }
+
+  // Snapshot relayer's tokenOut balance before the swap so we can compute the
+  // actual output (and pass the full surplus to the user, not just the minimum).
+  let relayerBalBefore = 0n;
+  try {
+    relayerBalBefore = await publicClient.readContract({
+      address:      pair.tokenOut,
+      abi:          ERC20_ABI,
+      functionName: "balanceOf",
+      args:         [relayer.account.address],
+    });
+  } catch {
+    req.log.warn("Could not snapshot relayer tokenOut balance before swap — will fall back to amountOutMin");
   }
 
   const routes = [{ from: pair.tokenIn, to: pair.tokenOut, stable: poolStable, factory: AERODROME_FACTORY }];
@@ -516,9 +540,35 @@ router.post("/swap/execute", async (req, res) => {
     return res.status(500).json({ error: `Swap reverted: ${msg}. Contact support — tokens may be held by relayer.`, permitHash, pullHash });
   }
 
-  // ── Final TX: send (swapAmountOutMin − protocol fee) to user ────────────
-  // Using swapAmountOutMin (worst-case fresh quote) ensures the relayer holds enough.
-  const userAmount = (swapAmountOutMin * (10_000n - SWAP_FEE_BPS)) / 10_000n;
+  // ── Compute actual swap output ────────────────────────────────────────────
+  // The swap sends output to the relayer; compare balance before/after to get
+  // the real amount received. This is always ≥ swapAmountOutMin (that's the
+  // on-chain floor), but positive slippage should flow to the user, not sit in
+  // the relayer on top of the 0.3% protocol fee.
+  let actualSwapOutput = swapAmountOutMin; // conservative fallback
+  try {
+    const relayerBalAfter = await publicClient.readContract({
+      address:      pair.tokenOut,
+      abi:          ERC20_ABI,
+      functionName: "balanceOf",
+      args:         [relayer.account.address],
+    });
+    const received = relayerBalAfter - relayerBalBefore;
+    if (received > 0n) {
+      actualSwapOutput = received;
+      req.log.info(
+        { amountOutMin: swapAmountOutMin.toString(), actualSwapOutput: actualSwapOutput.toString() },
+        "actual swap output measured from balance delta",
+      );
+    }
+  } catch {
+    req.log.warn("Could not read relayer tokenOut balance after swap — falling back to swapAmountOutMin");
+  }
+
+  // ── Final TX: send (actualSwapOutput − protocol fee) to user ─────────────
+  // Apply the 0.30% protocol fee to the real output so any positive slippage
+  // passes through to the user rather than accruing to the relayer.
+  const userAmount = (actualSwapOutput * (10_000n - SWAP_FEE_BPS)) / 10_000n;
   let transferHash: Hex;
   try {
     transferHash = await writeWithRetry(

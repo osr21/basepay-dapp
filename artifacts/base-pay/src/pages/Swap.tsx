@@ -119,6 +119,8 @@ export default function SwapPage() {
           tokenOut:    toToken.address,
           amountIn:    amountBig!.toString(),
           owner:       address,
+          // poolAddress must match what we signed the EIP-3009 authorization for
+          poolAddress: quote.poolAddress,
           validAfter:  auth.validAfter.toString(),
           validBefore: auth.validBefore.toString(),
           nonce:       auth.nonce,

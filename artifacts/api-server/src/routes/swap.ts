@@ -181,6 +181,8 @@ const SwapSchema = z.object({
   tokenOut:    z.string().refine(isAddress, "invalid tokenOut address"),
   amountIn:    z.string().regex(/^\d{1,13}$/, "amountIn must be 1–13 digit integer string"),
   owner:       z.string().refine(isAddress, "invalid owner address"),
+  // Pool address the user signed the EIP-3009 authorization for (must match TX1 recipient exactly)
+  poolAddress: z.string().refine(isAddress, "invalid poolAddress"),
   // EIP-3009 authorization
   validAfter:  z.string().regex(/^\d{1,12}$/, "validAfter must be unix timestamp string"),
   validBefore: z.string().regex(/^\d{1,12}$/, "validBefore must be unix timestamp string"),
@@ -246,6 +248,10 @@ router.get("/swap/quote", async (req, res) => {
 //        → output tokens move directly from the Aerodrome pool to the user wallet.
 //          The relay wallet never holds the output tokens.
 //
+// IMPORTANT: poolAddress is provided by the client and must match the address the
+// user signed their EIP-3009 authorization for. The server validates this address
+// is a real Aerodrome pool for the given pair before proceeding.
+//
 // Error recovery:
 //   - TX1 failure  → return error; user's funds never left their wallet.
 //   - TX2 failure after TX1 → attempt pool.skim(relayer) to recover the deposited
@@ -256,7 +262,7 @@ router.post("/swap/execute", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
   }
-  const { tokenIn, tokenOut, amountIn, owner, validAfter, validBefore, nonce, v, r, s, slippageBps } = parsed.data;
+  const { tokenIn, tokenOut, amountIn, owner, poolAddress, validAfter, validBefore, nonce, v, r, s, slippageBps } = parsed.data;
 
   const pair = resolveTokens(tokenIn, tokenOut);
   if (!pair) {
@@ -275,33 +281,51 @@ router.post("/swap/execute", async (req, res) => {
     return res.status(400).json({ error: "EIP-3009 authorization has expired (validBefore is in the past)" });
   }
 
-  // Verify sender balance
-  const balance = await publicClient.readContract({
-    address:      pair.tokenIn,
-    abi:          ERC20_ABI,
-    functionName: "balanceOf",
-    args:         [owner as `0x${string}`],
-  });
+  // Verify sender balance and validate pool in parallel
+  let balance: bigint;
+  let token0: `0x${string}`;
+  let quoteAmountOut: bigint;
+  try {
+    [balance, token0, quoteAmountOut] = await Promise.all([
+      publicClient.readContract({
+        address:      pair.tokenIn,
+        abi:          ERC20_ABI,
+        functionName: "balanceOf",
+        args:         [owner as `0x${string}`],
+      }),
+      publicClient.readContract({
+        address:      poolAddress as `0x${string}`,
+        abi:          POOL_ABI,
+        functionName: "token0",
+      }),
+      publicClient.readContract({
+        address:      poolAddress as `0x${string}`,
+        abi:          POOL_ABI,
+        functionName: "getAmountOut",
+        args:         [amountBig, pair.tokenIn],
+      }),
+    ]);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message.slice(0, 200) : String(err);
+    req.log.error({ err, poolAddress }, "failed to read pool/balance data");
+    return res.status(503).json({ error: `Failed to read pool data: ${msg}` });
+  }
+
   if (balance < amountBig) {
     return res.status(400).json({ error: "Insufficient token balance" });
   }
 
-  // Find best pool and get initial quote for slippage reference
-  const best = await getBestPool(pair.tokenIn, pair.tokenOut, amountBig);
-  if (!best) {
-    return res.status(503).json({ error: "Could not get swap quote — no liquid pool found" });
+  // Validate poolAddress is a real Aerodrome pool for this pair by checking token0
+  const validPoolTokens = [pair.tokenIn.toLowerCase(), pair.tokenOut.toLowerCase()];
+  if (!validPoolTokens.includes(token0.toLowerCase())) {
+    return res.status(400).json({ error: "poolAddress is not a valid Aerodrome pool for this token pair" });
   }
-  const { poolAddress, stable: poolStable } = best;
+
   const slipBps      = BigInt(slippageBps ?? 50);
-  const amountOutMin = (best.amountOut * (10_000n - slipBps)) / 10_000n;
+  const amountOutMin = (quoteAmountOut * (10_000n - slipBps)) / 10_000n;
 
   // Determine token0/token1 ordering for pool.swap output amounts
   // (Solidly pools sort tokens by address; lower address = token0)
-  const token0 = await publicClient.readContract({
-    address:      poolAddress,
-    abi:          POOL_ABI,
-    functionName: "token0",
-  });
   const isToken0In = pair.tokenIn.toLowerCase() === token0.toLowerCase();
   // If tokenIn = token0 → output is token1 → amount0Out=0, amount1Out=X
   // If tokenIn = token1 → output is token0 → amount0Out=X, amount1Out=0
@@ -362,7 +386,7 @@ router.post("/swap/execute", async (req, res) => {
       args:         [amountBig, pair.tokenIn],
     });
   } catch {
-    freshAmountOut = best.amountOut; // fall back to original quote
+    freshAmountOut = quoteAmountOut; // fall back to pre-TX1 quote
   }
 
   // Slippage guard: if price moved too much after TX1, skim tokens back and abort
@@ -506,7 +530,7 @@ router.post("/swap/execute", async (req, res) => {
   }
 
   req.log.info(
-    { swapHash, twaHash, amountIn, amountOut: freshAmountOut.toString(), owner, stable: poolStable },
+    { swapHash, twaHash, amountIn, amountOut: freshAmountOut.toString(), owner, poolAddress },
     "gasless swap complete — relay wallet never held user tokens",
   );
 

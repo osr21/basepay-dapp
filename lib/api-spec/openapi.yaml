@@ -613,7 +613,7 @@ components:
 
     SwapInput:
       type: object
-      required: [tokenIn, tokenOut, amountIn, owner, validAfter, validBefore, nonce, v, r, s]
+      required: [tokenIn, tokenOut, amountIn, owner, poolAddress, validAfter, validBefore, nonce, v, r, s]
       properties:
         tokenIn:
           type: string
@@ -627,6 +627,9 @@ components:
         owner:
           type: string
           description: Wallet address of the token owner (signer of the EIP-3009 authorization)
+        poolAddress:
+          type: string
+          description: Aerodrome pool address the user signed the EIP-3009 authorization for (from /swap/quote)
         validAfter:
           type: string
           description: EIP-3009 validAfter Unix timestamp (seconds, decimal string)

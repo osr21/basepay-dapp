@@ -15,6 +15,8 @@ export interface SwapInput {
   amountIn: string;
   /** Wallet address of the token owner (signer of the EIP-3009 authorization) */
   owner: string;
+  /** Aerodrome pool address the user signed the EIP-3009 authorization for (from /swap/quote) */
+  poolAddress: string;
   /** EIP-3009 validAfter Unix timestamp (seconds, decimal string) */
   validAfter: string;
   /** EIP-3009 validBefore Unix timestamp (seconds, decimal string) */

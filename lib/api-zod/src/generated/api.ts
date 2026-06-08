@@ -175,6 +175,7 @@ export const ExecuteGaslessSwapBody = zod.object({
   "tokenOut": zod.string().describe('Output token contract address (USDC or EURC)'),
   "amountIn": zod.string().describe('Input amount in atomic units (6 decimals) as decimal string'),
   "owner": zod.string().describe('Wallet address of the token owner (signer of the EIP-3009 authorization)'),
+  "poolAddress": zod.string().describe('Aerodrome pool address the user signed the EIP-3009 authorization for (from \/swap\/quote)'),
   "validAfter": zod.string().describe('EIP-3009 validAfter Unix timestamp (seconds, decimal string)'),
   "validBefore": zod.string().describe('EIP-3009 validBefore Unix timestamp (seconds, decimal string)'),
   "nonce": zod.string().describe('EIP-3009 random nonce (0x-prefixed 32-byte hex)'),

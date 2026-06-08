@@ -143,8 +143,9 @@ const AERODROME_ROUTER_ABI = [
 ] as const;
 
 // ── Rate limit constants ───────────────────────────────────────────────────────
-const MAX_AMOUNT   = 10_000_000_000n; // 10,000 tokens (6 dec)
-const MAX_SLIP_BPS = 100n;            // 1% slippage guard on quote
+const MAX_AMOUNT    = 10_000_000_000n; // 10,000 tokens (6 dec)
+const MAX_SLIP_BPS  = 100n;            // 1% slippage guard on quote
+const MIN_RELAY_ETH = 1_000_000_000_000_000n; // 0.001 ETH minimum in relay wallet
 
 // ── Pool auto-discovery ────────────────────────────────────────────────────────
 // Tries stable + volatile, returns the pool with the better quote.
@@ -206,7 +207,7 @@ const SwapSchema = z.object({
   v:           z.number().int().min(27).max(28),
   r:           z.string().refine((v: string) => isHex(v) && v.length === 66, "r must be 0x-prefixed 32-byte hex"),
   s:           z.string().refine((v: string) => isHex(v) && v.length === 66, "s must be 0x-prefixed 32-byte hex"),
-  slippageBps: z.number().int().min(0).max(100).optional(),
+  slippageBps: z.number().int().min(1).max(100).optional(),
 });
 
 // ── GET /api/swap/quote ───────────────────────────────────────────────────────
@@ -249,7 +250,9 @@ router.get("/swap/quote", async (req, res) => {
   return res.json({
     amountOut:         amountOut.toString(),
     amountOutMin:      amountOutMin.toString(),
-    fee:               stable ? 100 : 500,
+    // Aerodrome pool fee paid by swapper (embedded in getAmountsOut):
+    // volatile pools: 0.3% (30 bps), stable pools: 0.05% (5 bps)
+    fee:               stable ? 5 : 30,
     protocolFeeBps:    0,
     protocolFeeAmount: "0",
     amountOutAfterFee: amountOut.toString(),
@@ -305,10 +308,28 @@ router.post("/swap/execute", async (req, res) => {
   if (validBeforeBig < nowSeconds) {
     return res.status(400).json({ error: "EIP-3009 authorization has expired (validBefore is in the past)" });
   }
+  if (validAfterBig > nowSeconds) {
+    return res.status(400).json({ error: "EIP-3009 authorization is not yet valid (validAfter is in the future)" });
+  }
+  if (validBeforeBig <= validAfterBig) {
+    return res.status(400).json({ error: "validBefore must be after validAfter" });
+  }
 
   let relayer: Relayer;
   try { relayer = getRelayer(); } catch {
     return res.status(500).json({ error: "Relayer not configured" });
+  }
+
+  // Verify relay ETH balance before committing to 2 on-chain transactions
+  try {
+    const relayEth = await publicClient.getBalance({ address: relayer.account.address });
+    if (relayEth < MIN_RELAY_ETH) {
+      req.log.warn({ relayEth: relayEth.toString() }, "relay ETH below minimum — rejecting swap");
+      return res.status(503).json({ error: "Relay wallet has insufficient ETH — swaps temporarily unavailable" });
+    }
+  } catch (ethErr) {
+    req.log.error({ err: ethErr }, "failed to check relay ETH balance");
+    return res.status(503).json({ error: "Unable to verify relay status" });
   }
 
   // Verify sender balance and get a fresh quote in parallel

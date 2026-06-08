@@ -201,7 +201,7 @@ export default function SwapPage() {
           </div>
           <h2 className="text-lg font-bold">Executing swap...</h2>
           <p className="text-sm text-muted-foreground">
-            The BasePay relayer is routing your swap through Aerodrome Finance. Your tokens go pool-direct — the relay wallet never holds them.
+            The BasePay relayer is moving your {fromToken.symbol} to Aerodrome Finance and swapping it for {toToken.symbol} — delivered straight to your wallet.
           </p>
         </div>
       </div>
@@ -227,7 +227,7 @@ export default function SwapPage() {
           </p>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-xs text-green-400 font-medium mb-4">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            Zero gas · Zero relay custody · Pool-direct
+            Zero gas · 1 signature · Aerodrome pool-direct
           </div>
           {txHash && (
             <a
@@ -437,11 +437,11 @@ export default function SwapPage() {
         </div>
         <div className="flex items-start gap-2">
           <span className="text-primary font-bold mt-px">2.</span>
-          <span>BasePay's relayer submits the transfer: your {fromToken.symbol} goes straight to the Aerodrome pool — the relay wallet never holds your tokens</span>
+          <span>BasePay's relayer submits two transactions: first moves your {fromToken.symbol} to the relay, then swaps it through Aerodrome Finance — all on your behalf, no ETH needed from you</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-green-400 font-bold mt-px">✓</span>
-          <span className="text-green-400">Aerodrome sends {toToken.symbol} directly to your wallet. Gas: <strong>$0</strong>. Protocol fee: <strong>$0</strong></span>
+          <span className="text-green-400">Aerodrome delivers {toToken.symbol} directly to your wallet. Gas: <strong>$0</strong>. Protocol fee: <strong>$0</strong></span>
         </div>
       </div>
     </div>

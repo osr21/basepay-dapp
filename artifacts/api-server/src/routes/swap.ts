@@ -432,7 +432,12 @@ router.post("/swap/execute", async (req, res) => {
   // The router atomically: (a) pulls tokenIn from relay via transferFrom,
   // (b) deposits to pool, (c) triggers pool.swap, (d) delivers tokenOut to user.
   // Single on-chain transaction — no race condition between deposit and swap.
-  const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
+  //
+  // Deadline is set 2 hours out (not 5 minutes) because the Replit/production
+  // server clock can drift significantly from Base mainnet's block.timestamp.
+  // The user's EIP-3009 validBefore is the actual security expiry; this deadline
+  // is only a router safety guard and a large buffer is safe here.
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + 7_200);
   let swapHash: Hex;
   try {
     swapHash = await writeWithRetry(

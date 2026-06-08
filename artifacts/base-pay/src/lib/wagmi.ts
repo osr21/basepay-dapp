@@ -1,8 +1,12 @@
 import { createConfig, http, createConnector } from "wagmi";
 import { base } from "viem/chains";
-import { injected } from "wagmi/connectors";
+import { coinbaseWallet, injected, walletConnect } from "wagmi/connectors";
 import { concat, fallback, type Hex } from "viem";
 import { Attribution } from "ox/erc8021";
+
+const APP_NAME     = "BasePay";
+const APP_LOGO_URL = "https://base-pay.replit.app/favicon.svg";
+const APP_URL      = "https://base-pay.replit.app";
 
 // ── Coinbase Verifications (EAS) ──────────────────────────────────────────────
 export const EAS_ADDRESS         = "0x4200000000000000000000000000000000000021" as const;
@@ -60,10 +64,38 @@ function attributedInjected() {
   });
 }
 
+// ── Connectors ────────────────────────────────────────────────────────────────
+// coinbaseWallet: sends appName + appLogoUrl to Coinbase Wallet so the
+// connection request is identified as "BasePay" rather than an unknown origin.
+// This is the primary signal Blockaid/Coinbase use to verify a dApp's identity.
+const cbWallet = coinbaseWallet({
+  appName:    APP_NAME,
+  appLogoUrl: APP_LOGO_URL,
+  preference: { options: "all" },  // smart wallet + EOA
+});
+
+// walletConnect: optional — set VITE_WALLETCONNECT_PROJECT_ID from
+// cloud.walletconnect.com. A verified project ID gives the domain a trust
+// badge and removes Blockaid's "unverified" flag for WalletConnect sessions.
+const _wcProjectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string | undefined;
+const wcConnector = _wcProjectId
+  ? walletConnect({
+      projectId: _wcProjectId,
+      metadata: {
+        name:        APP_NAME,
+        description: "USDC payments on Base — gasless transfers, swaps, batch pay, escrow, subscriptions.",
+        url:         APP_URL,
+        icons:       [APP_LOGO_URL],
+      },
+    })
+  : null;
+
 export const config = createConfig({
   chains: [base],
   connectors: [
+    cbWallet,
     attributedInjected(),
+    ...(wcConnector ? [wcConnector] : []),
   ],
   transports: {
     [base.id]: fallback([

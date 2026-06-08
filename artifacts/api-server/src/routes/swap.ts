@@ -437,13 +437,17 @@ router.post("/swap/execute", async (req, res) => {
   //
   // Deadline is set 2 hours out (not 5 minutes) because the Replit/production
   // server clock can drift significantly from Base mainnet's block.timestamp.
-  // The user's EIP-3009 validBefore is the actual security expiry; this deadline
-  // is only a router safety guard and a large buffer is safe here.
   //
-  // NOTE: We submit TX2 and return the txHash immediately WITHOUT waiting for
-  // the on-chain receipt. Base has ~2s block times so the tx confirms quickly.
-  // Waiting for the receipt inside the HTTP handler risks proxy timeouts when
-  // the combined TX1+TX2 confirmation window exceeds the proxy's request limit.
+  // IMPORTANT: We skip eth_estimateGas (set explicit gas: 350_000n) because
+  // viem's gas estimation simulates against the *pending* block state which may
+  // not yet reflect TX1's token deposit. The estimation incorrectly sees zero
+  // EURC/USDC at the relay and reverts. TX2 on-chain executes against the
+  // canonical state (TX1 is already in a confirmed block) so it succeeds.
+  //
+  // We also pause 1.5s after TX1 confirmation to let the RPC's state index
+  // catch up before the allowance read and TX2 submission.
+  await new Promise(r => setTimeout(r, 1_500));
+
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 7_200);
   let swapHash: Hex;
   try {
@@ -455,6 +459,10 @@ router.post("/swap/execute", async (req, res) => {
         abi:          AERODROME_ROUTER_ABI,
         functionName: "swapExactTokensForTokens",
         args:         [amountBig, amountOutMin, routes, owner as `0x${string}`, deadline],
+        // Explicit gas limit bypasses eth_estimateGas to avoid RPC state-lag
+        // false-reverts. 350k is well above the actual ~150-250k used by a
+        // single-hop Aerodrome volatile swap.
+        gas:          350_000n,
       }),
       "TX2 router.swapExactTokensForTokens",
     );

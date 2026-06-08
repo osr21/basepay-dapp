@@ -1,0 +1,58 @@
+{
+  "name": "@basepay/contracts",
+  "version": "2.0.0",
+  "description": "BasePay V2 smart contract ABIs, typed addresses, and integration examples for Base Mainnet (chainId 8453)",
+  "license": "MIT",
+  "homepage": "https://github.com/osr21/basepay-dapp/tree/main/contracts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/osr21/basepay-dapp",
+    "directory": "contracts"
+  },
+  "keywords": [
+    "base",
+    "usdc",
+    "eurc",
+    "payments",
+    "escrow",
+    "subscriptions",
+    "batch-payments",
+    "eip-2612",
+    "permit",
+    "onchain",
+    "basepay"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types":  "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require":"./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "*.json",
+    "*.sol",
+    "integration",
+    "README.md",
+    "AUDIT.md"
+  ],
+  "scripts": {
+    "build":     "tsc --project tsconfig.json",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "ethers": "^6.13.5",
+    "typescript": "~5.9.3",
+    "viem": "^2.52.0"
+  },
+  "peerDependencies": {
+    "viem": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "viem": { "optional": true }
+  }
+}

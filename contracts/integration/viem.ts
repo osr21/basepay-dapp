@@ -74,7 +74,7 @@ export const publicClient = createPublicClient({
 export function getWalletClient() {
   return createWalletClient({
     chain: base,
-    transport: custom(window.ethereum!),
+    transport: custom((window as Window & { ethereum?: import("viem").EIP1193Provider }).ethereum!),
   });
 }
 
@@ -172,12 +172,13 @@ export async function batchPayWithPermit(
   const totalAmount = amounts.reduce((a, b) => a + b, 0n);
 
   // Quote
-  const { totalGross, totalFee, totalNet } = await publicClient.readContract({
+  const batchQuote = await publicClient.readContract({
     address: ADDRESSES.batchPay,
     abi: BATCH_ABI,
     functionName: "quoteBatch",
     args: [amounts],
   });
+  const [totalGross, totalFee, totalNet] = batchQuote;
   console.log(`Batch: gross=${totalGross}, fee=${totalFee}, net=${totalNet}`);
 
   // Permit for total gross amount

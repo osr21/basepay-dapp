@@ -23,8 +23,9 @@ export const provider = new ethers.JsonRpcProvider("https://mainnet.base.org", 8
 
 /** For browser (MetaMask / injected wallet) */
 export function getBrowserSigner() {
-  if (!window.ethereum) throw new Error("No injected wallet found");
-  return new ethers.BrowserProvider(window.ethereum).getSigner();
+  const eth = (window as Window & { ethereum?: ethers.Eip1193Provider }).ethereum;
+  if (!eth) throw new Error("No injected wallet found");
+  return new ethers.BrowserProvider(eth).getSigner();
 }
 
 /** For backend / server-side (private key) */
@@ -257,7 +258,7 @@ export function onPayment(
   }) => void,
 ) {
   const router = new ethers.Contract(ADDRESSES.router, ROUTER_ABI, provider);
-  router.on("Payment", (sender, recipient, _token, grossAmount, _fee, netAmount, memo) => {
+  router.on("Payment", (sender: string, recipient: string, _token: string, grossAmount: bigint, _fee: bigint, netAmount: bigint, memo: string) => {
     callback({ sender, recipient, grossAmount, netAmount, memo });
   });
   return () => router.removeAllListeners("Payment");

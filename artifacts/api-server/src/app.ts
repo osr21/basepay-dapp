@@ -20,17 +20,21 @@ const ALLOWED_ORIGINS = [
   /\.replit\.co$/,
 ];
 
-app.use(
+// CORS — the /api/gasless routes are the public relay, open to any external dApp.
+// All other routes are restricted to Replit domains.
+app.use((req, res, next) => {
+  const isPublicRelay = req.path.startsWith("/api/gasless");
   cors({
-    origin(origin, cb) {
-      // Non-browser requests (e.g. curl, server-to-server) have no Origin header.
-      if (!origin) return cb(null, true);
-      const allowed = ALLOWED_ORIGINS.some((re) => re.test(origin));
-      cb(allowed ? null : new Error("CORS: origin not allowed"), allowed);
-    },
-    credentials: true,
-  }),
-);
+    origin: isPublicRelay
+      ? true  // any origin — rate limiting (20 req/min per IP) handles abuse
+      : (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
+          if (!origin) return cb(null, true);
+          const allowed = ALLOWED_ORIGINS.some((re) => re.test(origin));
+          cb(allowed ? null : new Error("CORS: origin not allowed"), allowed);
+        },
+    credentials: !isPublicRelay,
+  })(req, res, next);
+});
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 const limiter = rateLimit({

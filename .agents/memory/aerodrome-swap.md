@@ -1,69 +1,55 @@
 ---
 name: Aerodrome Swap Architecture
-description: Gasless USDC↔EURC swap via Aerodrome Finance on Base — why Uniswap V3 was dropped and how the 4-tx relayer flow works
+description: Gasless USDC↔EURC swap via Aerodrome Router on Base — race condition root cause and atomic fix
 ---
-
-## Key finding: Uniswap V3 unusable for USDC/EURC on Base
-
-- Uniswap V3 QuoterV2 `0x3D4e44EB1374240cE5F1B136CF68a4F7f823AE3A` has **zero bytecode** on Base mainnet (wrong address).
-- All four Uniswap V3 USDC/EURC pools (fee tiers 100/500/3000/10000) exist at the factory but have `liquidity: 0n` — no active LP positions.
 
 ## Aerodrome Finance contracts on Base (confirmed live)
 
 - PoolFactory: `0x420DD381b31aEf6683db6B902084cB0FFECe40Da` (40 hex chars — note trailing 'a')
 - Router: `0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43`
-- USDC/EURC stable pool: `0xeF0d374FE41fC6dA7f8ED7c56C10A8f2A4f75313`
 - USDC/EURC volatile pool: `0xFDF5139b38525627B47538536042A7c8d2686BD9`
-- Quote via `getAmountsOut(uint256, tuple[])` — see swap.ts for JSON ABI (human-readable fails on tuple array)
-- Volatile pool often gives better rate for USDC/EURC than stable pool — always try both and pick best
+- Uniswap V3 has zero USDC/EURC liquidity on Base — Aerodrome only
+- Volatile pool often gives better rate than stable — always try both and pick best
 
-## Relayer EIP-7702 constraint
+## Current swap flow (router-based, atomic — implemented)
 
-- The DEPLOYER_PRIVATE_KEY relayer is a delegated (EIP-7702) account on Base mainnet
-- Sending transactions at startup can fail with "in-flight transaction limit reached for delegated accounts"
-- **Pattern**: skip module-level pre-approvals; check allowance inline during execute and approve only when needed
+1. Quote endpoint (`GET /api/swap/quote`) returns `relayerAddress` (relay wallet's public address)
+2. User signs EIP-3009: `transferWithAuthorization(from=user, to=relay, amount)` — relay wallet is the `to`
+3. TX1: relay submits `transferWithAuthorization` → USDC/EURC moves user → relay wallet
+4. Relay checks allowance for Aerodrome Router; approves max uint256 once if insufficient
+5. TX2: relay calls `router.swapExactTokensForTokens(amountIn, amountOutMin, routes, user, deadline)`
+   → Router atomically deposits tokenIn from relay into pool, then calls `pool.swap`, output goes directly to user
 
-## Gasless swap 4-tx flow (swap.ts)
+SwapInput sends `stable: boolean` (NOT `poolAddress`) — server constructs route from it.
 
-1. TX1: `token.permit(user, relayer, amountIn, deadline, v, r, s)` — relayer submits the user's off-chain EIP-2612 sig
-2. TX2: `token.transferFrom(user, relayer, amountIn)` — relayer pulls tokens
-3. TX3 (conditional): `token.approve(aerodromeRouter, maxUint256)` — only if relayer's allowance is insufficient
-4. TX4: `aerodromeRouter.swapExactTokensForTokens(...)` — output goes to relayer
-5. TX5: `outputToken.transfer(user, amountOut - 0.30% fee)` — user receives net amount
+## Root cause of old broken approach (pool.swap directly)
 
-**Why permit spender = relayer (not router):** Aerodrome router's `swapExactTokensForTokens` always pulls from `msg.sender`. The router has no `selfPermit`. User must permit the relayer, which then transfers to itself and swaps.
+- Old TX1: `transferWithAuthorization(user → pool)` — USDC deposited into pool as excess balance
+- Old TX2: `pool.swap(amount0Out, 0, user, 0x)` — FAILED with `InsufficientInputAmount()` (selector `0x098fb561`)
+- **Why it failed:** Any tx between TX1 and TX2 that updates pool stored reserves (another swap, `pool.sync()`, etc.) makes `balance == reserve` — no excess visible to the pool → zero computed input → `InsufficientInputAmount()`
+- Error selector `0x098fb561` = `keccak256("InsufficientInputAmount()")[0:4]` (Aerodrome custom error)
 
-## EIP-7702 smart wallet incompatibility with EIP-2612 permit
+## Recovery if TX2 fails
 
-User address `0xB14436...` has 23-byte EIP-7702 delegation bytecode (Coinbase Smart Wallet).
-When a passkey-based smart wallet signs `eth_signTypedData`, it produces a WebAuthn signature
-that is NOT valid ECDSA. USDC's `permit()` uses `SignatureChecker.isValidSignatureNow()`, which
-tries `ecrecover` first (fails) then `isValidSignature(owner, digest, abi.encodePacked(r,s,v))`.
-The packed 65-byte truncation isn't the full WebAuthn sig, so the ERC-1271 check fails too.
-The permit TX **reverts on-chain** but `viem.waitForTransactionReceipt` does NOT throw on reverts
-— it just returns the receipt. You must explicitly check `receipt.status === "success"`.
-
-**Fix applied:**
-- Backend: check `receipt.status` after every `waitForTransactionReceipt`; on revert return 400 with clear message about smart wallet incompatibility
-- Backend: post-permit allowance readback as belt-and-suspenders
-- Frontend: `eth_getCode` bytecode check (same pattern as GaslessTransfer.tsx); if bytecode ≠ "0x", show warning + disable swap button
-
-**Why viem doesn't throw on revert:** `waitForTransactionReceipt` resolves when the TX is included
-in a block regardless of its execution outcome. You must check `receipt.status` yourself.
+Relay holds tokenIn directly → simple `ERC20.transfer(user, amount)` refund (one tx).
+Old approach required `pool.skim(relay)` first (two txs, fragile if reserves already synced).
 
 ## EIP-7702 relayer "in-flight transaction limit" retry
 
-The RELAYER wallet (`0xdb5019b8...`) is itself an EIP-7702 delegated account. Base RPC enforces a
-limit of 1 pending tx at a time for delegated accounts. Even after `waitForTransactionReceipt({ confirmations: 1 })` returns, there is a brief window where the Base sequencer still considers the previous tx in-flight, causing the next `eth_sendRawTransaction` to fail with:
-`"in-flight transaction limit reached for delegated accounts"`
+The RELAYER wallet (`0xdb5019b8...`) is an EIP-7702 delegated account. Base RPC enforces a
+limit of 1 pending tx at a time for delegated accounts. Even after `waitForTransactionReceipt({ confirmations: 1 })` returns, there is a brief window where the sequencer still considers the previous tx in-flight.
 
-**Fix:** `writeWithRetry(fn, label, maxAttempts=6)` — catches the in-flight error, waits 1.5s × (attempt+1), retries up to 6 times. Wrap ALL `relayer.client.writeContract` calls in this helper (TX1–TX5).
+**Fix:** `writeWithRetry(fn, label, maxAttempts=6)` — catches the in-flight error, waits 1.5s × (attempt+1), retries up to 6 times. Wrap ALL `relayer.client.writeContract` calls in this helper.
+
+## Smart wallet / EIP-7702 incompatibility with EIP-3009
+
+EIP-3009 uses `ecrecover`-based signature verification. Passkey-based smart wallets (Coinbase Smart Wallet with EIP-7702) produce WebAuthn signatures incompatible with `ecrecover`. Always check `eth_getCode` on the user's address; if bytecode exists, disable the gasless swap and show a warning (same pattern as GaslessTransfer.tsx).
 
 ## Token address comparison gotcha
 
 Always define lowercase constants for comparison:
 ```typescript
 const USDC_LC = USDC.toLowerCase();
-// then: if (input.toLowerCase() === USDC_LC) { ... }
+if (input.toLowerCase() === USDC_LC) { ... }
 ```
 Never compare `input.toLowerCase() === USDC` when USDC is a checksummed address — will always fail.

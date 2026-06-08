@@ -189,10 +189,12 @@ export interface SwapQuoteResult {
   protocolFeeAmount: string;
   /** Net output amount the user receives (= amountOut when fee is 0) */
   amountOutAfterFee: string;
-  /** Aerodrome pool address — use as the EIP-3009 transferWithAuthorization recipient */
+  /** Aerodrome pool address used for the swap */
   poolAddress: string;
   /** Whether the best Aerodrome pool is stable (true) or volatile (false) */
   stable?: boolean;
+  /** Relay wallet address — use as the EIP-3009 transferWithAuthorization recipient when signing */
+  relayerAddress?: string;
 }
 
 export interface SwapInput {
@@ -204,8 +206,8 @@ export interface SwapInput {
   amountIn: string;
   /** Wallet address of the token owner (signer of the EIP-3009 authorization) */
   owner: string;
-  /** Aerodrome pool address the user signed the EIP-3009 authorization for (from /swap/quote) */
-  poolAddress: string;
+  /** Whether to use the stable (true) or volatile (false) Aerodrome pool (from /swap/quote) */
+  stable: boolean;
   /** EIP-3009 validAfter Unix timestamp (seconds, decimal string) */
   validAfter: string;
   /** EIP-3009 validBefore Unix timestamp (seconds, decimal string) */

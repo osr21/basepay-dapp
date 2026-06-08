@@ -83,6 +83,8 @@ function resolveTokens(tokenIn: string, tokenOut: string): TokenPair | null {
 const ERC20_ABI = parseAbi([
   "function balanceOf(address) external view returns (uint256)",
   "function transfer(address to, uint256 amount) external returns (bool)",
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
 ]);
 
 // EIP-3009: FiatToken V2.2 (USDC, EURC)
@@ -95,15 +97,7 @@ const FACTORY_ABI = parseAbi([
   "function getPool(address tokenA, address tokenB, bool stable) external view returns (address)",
 ]);
 
-// Aerodrome pool (Solidly fork)
-const POOL_ABI = parseAbi([
-  "function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data) external",
-  "function token0() external view returns (address)",
-  "function getAmountOut(uint256 amountIn, address tokenIn) external view returns (uint256)",
-  "function skim(address to) external",
-]);
-
-// Aerodrome router — only used for quotes
+// Aerodrome router — quotes and atomic swaps
 const AERODROME_ROUTER_ABI = [
   {
     type: "function",
@@ -121,6 +115,28 @@ const AERODROME_ROUTER_ABI = [
           { name: "factory", type: "address" },
         ],
       },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
+  },
+  {
+    type: "function",
+    name: "swapExactTokensForTokens",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn",     type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      {
+        name: "routes",
+        type: "tuple[]",
+        components: [
+          { name: "from",    type: "address" },
+          { name: "to",      type: "address" },
+          { name: "stable",  type: "bool"    },
+          { name: "factory", type: "address" },
+        ],
+      },
+      { name: "to",       type: "address" },
+      { name: "deadline", type: "uint256" },
     ],
     outputs: [{ name: "amounts", type: "uint256[]" }],
   },
@@ -181,9 +197,9 @@ const SwapSchema = z.object({
   tokenOut:    z.string().refine(isAddress, "invalid tokenOut address"),
   amountIn:    z.string().regex(/^\d{1,13}$/, "amountIn must be 1–13 digit integer string"),
   owner:       z.string().refine(isAddress, "invalid owner address"),
-  // Pool address the user signed the EIP-3009 authorization for (must match TX1 recipient exactly)
-  poolAddress: z.string().refine(isAddress, "invalid poolAddress"),
-  // EIP-3009 authorization
+  // Whether to use the stable (true) or volatile (false) Aerodrome pool
+  stable:      z.boolean(),
+  // EIP-3009 authorization (signed for the relay wallet as recipient)
   validAfter:  z.string().regex(/^\d{1,12}$/, "validAfter must be unix timestamp string"),
   validBefore: z.string().regex(/^\d{1,12}$/, "validBefore must be unix timestamp string"),
   nonce:       z.string().refine((v: string) => isHex(v) && v.length === 66, "nonce must be 0x-prefixed 32-byte hex"),
@@ -223,6 +239,11 @@ router.get("/swap/quote", async (req, res) => {
   const { amountOut, stable, poolAddress } = best;
   const amountOutMin = (amountOut * (10_000n - MAX_SLIP_BPS)) / 10_000n;
 
+  let relayerAddress: string;
+  try { relayerAddress = getRelayer().account.address; } catch {
+    return res.status(500).json({ error: "Relayer not configured" });
+  }
+
   req.log.info({ stable, poolAddress, amountOut: amountOut.toString() }, "Aerodrome swap quote");
 
   return res.json({
@@ -234,35 +255,37 @@ router.get("/swap/quote", async (req, res) => {
     amountOutAfterFee: amountOut.toString(),
     poolAddress,
     stable,
+    relayerAddress,
   });
 });
 
 // ── POST /api/swap/execute ────────────────────────────────────────────────────
-// Gasless swap via direct Aerodrome pool interaction — 2 relayer transactions:
+// Gasless swap via Aerodrome Router — 2 relayer transactions:
 //
-//   TX1: token.transferWithAuthorization(from=user, to=pool, value=amountIn, ...)
-//        → input tokens move directly from user wallet to the Aerodrome pool.
-//          The relay wallet never holds the input tokens.
+//   TX1: token.transferWithAuthorization(from=user, to=relay, value=amountIn, ...)
+//        → input tokens move from the user's wallet to the relay wallet.
+//          The relay temporarily holds them between TX1 and TX2.
 //
-//   TX2: pool.swap(amount0Out, amount1Out, to=user, data="0x")
-//        → output tokens move directly from the Aerodrome pool to the user wallet.
-//          The relay wallet never holds the output tokens.
+//   TX2: aerodromeRouter.swapExactTokensForTokens(amountIn, amountOutMin, routes, user, deadline)
+//        → Router atomically pulls input tokens from relay, executes the pool swap,
+//          and delivers output tokens directly to the user wallet in one tx.
 //
-// IMPORTANT: poolAddress is provided by the client and must match the address the
-// user signed their EIP-3009 authorization for. The server validates this address
-// is a real Aerodrome pool for the given pair before proceeding.
+// Why router instead of pool.swap directly:
+//   The prior approach was transferWithAuthorization(user→pool) then pool.swap — two
+//   separate txs. Any tx between them that updates the pool's stored reserves (another
+//   swap, pool.sync, etc.) causes pool.swap to revert with InsufficientInputAmount()
+//   because it sees balance == reserve (no excess input deposit visible).
+//   The Aerodrome Router atomically deposits and swaps in one tx, eliminating this race.
 //
 // Error recovery:
 //   - TX1 failure  → return error; user's funds never left their wallet.
-//   - TX2 failure after TX1 → attempt pool.skim(relayer) to recover the deposited
-//     tokens from the pool's excess balance, then refund user. If skim fails (e.g.
-//     another tx consumed the excess), log and return error — operator must resolve.
+//   - TX2 failure after TX1 → relay holds tokenIn → transfer directly back to user.
 router.post("/swap/execute", async (req, res) => {
   const parsed = SwapSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
   }
-  const { tokenIn, tokenOut, amountIn, owner, poolAddress, validAfter, validBefore, nonce, v, r, s, slippageBps } = parsed.data;
+  const { tokenIn, tokenOut, amountIn, owner, stable, validAfter, validBefore, nonce, v, r, s, slippageBps } = parsed.data;
 
   const pair = resolveTokens(tokenIn, tokenOut);
   if (!pair) {
@@ -281,12 +304,17 @@ router.post("/swap/execute", async (req, res) => {
     return res.status(400).json({ error: "EIP-3009 authorization has expired (validBefore is in the past)" });
   }
 
-  // Verify sender balance and validate pool in parallel
+  let relayer: Relayer;
+  try { relayer = getRelayer(); } catch {
+    return res.status(500).json({ error: "Relayer not configured" });
+  }
+
+  // Verify sender balance and get a fresh quote in parallel
+  const routes = [{ from: pair.tokenIn, to: pair.tokenOut, stable, factory: AERODROME_FACTORY }] as const;
   let balance: bigint;
-  let token0: `0x${string}`;
-  let quoteAmountOut: bigint;
+  let quoteAmounts: readonly bigint[];
   try {
-    [balance, token0, quoteAmountOut] = await Promise.all([
+    [balance, quoteAmounts] = await Promise.all([
       publicClient.readContract({
         address:      pair.tokenIn,
         abi:          ERC20_ABI,
@@ -294,50 +322,33 @@ router.post("/swap/execute", async (req, res) => {
         args:         [owner as `0x${string}`],
       }),
       publicClient.readContract({
-        address:      poolAddress as `0x${string}`,
-        abi:          POOL_ABI,
-        functionName: "token0",
-      }),
-      publicClient.readContract({
-        address:      poolAddress as `0x${string}`,
-        abi:          POOL_ABI,
-        functionName: "getAmountOut",
-        args:         [amountBig, pair.tokenIn],
+        address:      AERODROME_ROUTER,
+        abi:          AERODROME_ROUTER_ABI,
+        functionName: "getAmountsOut",
+        args:         [amountBig, routes],
       }),
     ]);
   } catch (err) {
     const msg = err instanceof Error ? err.message.slice(0, 200) : String(err);
-    req.log.error({ err, poolAddress }, "failed to read pool/balance data");
-    return res.status(503).json({ error: `Failed to read pool data: ${msg}` });
+    req.log.error({ err }, "failed to read balance/quote");
+    return res.status(503).json({ error: `Failed to fetch data: ${msg}` });
   }
 
   if (balance < amountBig) {
     return res.status(400).json({ error: "Insufficient token balance" });
   }
 
-  // Validate poolAddress is a real Aerodrome pool for this pair by checking token0
-  const validPoolTokens = [pair.tokenIn.toLowerCase(), pair.tokenOut.toLowerCase()];
-  if (!validPoolTokens.includes(token0.toLowerCase())) {
-    return res.status(400).json({ error: "poolAddress is not a valid Aerodrome pool for this token pair" });
+  const quoteAmountOut = quoteAmounts[1] ?? 0n;
+  if (quoteAmountOut === 0n) {
+    return res.status(503).json({ error: "No liquidity for this pair at the requested amount" });
   }
 
   const slipBps      = BigInt(slippageBps ?? 50);
   const amountOutMin = (quoteAmountOut * (10_000n - slipBps)) / 10_000n;
 
-  // Determine token0/token1 ordering for pool.swap output amounts
-  // (Solidly pools sort tokens by address; lower address = token0)
-  const isToken0In = pair.tokenIn.toLowerCase() === token0.toLowerCase();
-  // If tokenIn = token0 → output is token1 → amount0Out=0, amount1Out=X
-  // If tokenIn = token1 → output is token0 → amount0Out=X, amount1Out=0
-
-  let relayer: Relayer;
-  try { relayer = getRelayer(); } catch {
-    return res.status(500).json({ error: "Relayer not configured" });
-  }
-
-  // ── TX 1: transferWithAuthorization(user → pool) ──────────────────────────
-  // USDC/EURC move directly from the user's wallet to the Aerodrome pool.
-  // The relay wallet signs and pays gas but never holds the tokens.
+  // ── TX 1: transferWithAuthorization(user → relay) ─────────────────────────
+  // User's EIP-3009 signature moves tokens from their wallet to the relay wallet.
+  // The relay wallet holds the tokens until TX2 swaps them via the router.
   let twaHash: Hex;
   try {
     twaHash = await writeWithRetry(
@@ -349,7 +360,7 @@ router.post("/swap/execute", async (req, res) => {
         functionName: "transferWithAuthorization",
         args:         [
           owner as `0x${string}`,
-          poolAddress,
+          relayer.account.address,
           amountBig,
           validAfterBig,
           validBeforeBig,
@@ -371,41 +382,35 @@ router.post("/swap/execute", async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message.slice(0, 200) : "Transfer authorization failed";
     req.log.error({ err }, "swap TX1 (transferWithAuthorization) failed");
-    // TX1 failed → user's tokens never moved, safe to return error
     return res.status(500).json({ error: `Transfer failed: ${msg}` });
   }
 
-  // Refresh amountOut from pool immediately before TX2 to account for any
-  // price movement since the quote was fetched.
-  let freshAmountOut: bigint;
+  // ── Ensure relay has approved Aerodrome Router ────────────────────────────
+  // Check allowance; approve max uint256 once if insufficient (one-time per token).
   try {
-    freshAmountOut = await publicClient.readContract({
-      address:      poolAddress,
-      abi:          POOL_ABI,
-      functionName: "getAmountOut",
-      args:         [amountBig, pair.tokenIn],
+    const allowance = await publicClient.readContract({
+      address:      pair.tokenIn,
+      abi:          ERC20_ABI,
+      functionName: "allowance",
+      args:         [relayer.account.address, AERODROME_ROUTER],
     });
-  } catch {
-    freshAmountOut = quoteAmountOut; // fall back to pre-TX1 quote
-  }
-
-  // Slippage guard: if price moved too much after TX1, skim tokens back and abort
-  if (freshAmountOut < amountOutMin) {
-    req.log.warn(
-      { freshAmountOut: freshAmountOut.toString(), amountOutMin: amountOutMin.toString(), twaHash },
-      "slippage exceeded post-TX1 — attempting skim + refund",
-    );
-    try {
-      const skimHash = await writeWithRetry(
+    if (allowance < amountBig) {
+      const approveHash = await writeWithRetry(
         () => relayer.client.writeContract({
           chain: base, account: relayer.account,
-          address: poolAddress, abi: POOL_ABI,
-          functionName: "skim",
-          args: [relayer.account.address],
+          address: pair.tokenIn, abi: ERC20_ABI,
+          functionName: "approve",
+          args: [AERODROME_ROUTER, (2n ** 256n) - 1n],
         }),
-        "slippage-recovery skim",
+        "router approve",
       );
-      await publicClient.waitForTransactionReceipt({ hash: skimHash, confirmations: 1 });
+      await publicClient.waitForTransactionReceipt({ hash: approveHash, confirmations: 1 });
+      req.log.info({ approveHash, tokenIn: pair.tokenIn }, "relay approved Aerodrome Router");
+    }
+  } catch (approveErr) {
+    // Approval failed — relay holds tokenIn, refund user
+    req.log.error({ err: approveErr, twaHash }, "router approval failed — refunding");
+    try {
       const refundHash = await writeWithRetry(
         () => relayer.client.writeContract({
           chain: base, account: relayer.account,
@@ -413,54 +418,38 @@ router.post("/swap/execute", async (req, res) => {
           functionName: "transfer",
           args: [owner as `0x${string}`, amountBig],
         }),
-        "slippage-recovery refund",
+        "approval-failure refund",
       );
-      req.log.info({ refundHash, twaHash }, "refunded user after slippage abort");
-      return res.status(400).json({
-        error: "Price moved too much since quote — your tokens have been refunded.",
-        refundHash,
-      });
-    } catch (recErr) {
-      req.log.error({ recErr, twaHash }, "slippage recovery failed — tokens may be stuck in pool");
-      return res.status(500).json({
-        error: "Slippage too high and recovery failed — contact support with your transaction hash.",
-        twaHash,
-      });
+      req.log.info({ refundHash, twaHash }, "refunded user after approval failure");
+      return res.status(500).json({ error: "Router approval failed — your tokens have been refunded.", refundHash });
+    } catch (refundErr) {
+      req.log.error({ refundErr, twaHash }, "approval failure refund also failed");
     }
+    return res.status(500).json({ error: "Router approval failed — contact support.", twaHash });
   }
 
-  // ── TX 2: pool.swap(→ user) ───────────────────────────────────────────────
-  // Output tokens move directly from pool to user wallet.
-  const amount0Out = isToken0In ? 0n : freshAmountOut;
-  const amount1Out = isToken0In ? freshAmountOut : 0n;
-
+  // ── TX 2: router.swapExactTokensForTokens(relay → pool → user) ───────────
+  // The router atomically: (a) pulls tokenIn from relay via transferFrom,
+  // (b) deposits to pool, (c) triggers pool.swap, (d) delivers tokenOut to user.
+  // Single on-chain transaction — no race condition between deposit and swap.
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
   let swapHash: Hex;
   try {
     swapHash = await writeWithRetry(
       () => relayer.client.writeContract({
         chain:        base,
         account:      relayer.account,
-        address:      poolAddress,
-        abi:          POOL_ABI,
-        functionName: "swap",
-        args:         [amount0Out, amount1Out, owner as `0x${string}`, "0x"],
+        address:      AERODROME_ROUTER,
+        abi:          AERODROME_ROUTER_ABI,
+        functionName: "swapExactTokensForTokens",
+        args:         [amountBig, amountOutMin, routes, owner as `0x${string}`, deadline],
       }),
-      "TX2 pool.swap",
+      "TX2 router.swapExactTokensForTokens",
     );
   } catch (submitErr) {
-    // TX2 failed to submit — USDC is in pool but swap not mined → try to recover via skim
-    req.log.error({ err: submitErr, twaHash }, "swap TX2 submit failed — attempting skim recovery");
+    // TX2 failed to submit — relay still holds tokenIn → refund user
+    req.log.error({ err: submitErr, twaHash }, "swap TX2 submit failed — refunding user");
     try {
-      const skimHash = await writeWithRetry(
-        () => relayer.client.writeContract({
-          chain: base, account: relayer.account,
-          address: poolAddress, abi: POOL_ABI,
-          functionName: "skim",
-          args: [relayer.account.address],
-        }),
-        "TX2-submit-recovery skim",
-      );
-      await publicClient.waitForTransactionReceipt({ hash: skimHash, confirmations: 1 });
       const refundHash = await writeWithRetry(
         () => relayer.client.writeContract({
           chain: base, account: relayer.account,
@@ -468,50 +457,34 @@ router.post("/swap/execute", async (req, res) => {
           functionName: "transfer",
           args: [owner as `0x${string}`, amountBig],
         }),
-        "TX2-submit-recovery refund",
+        "TX2-submit-failure refund",
       );
       req.log.info({ refundHash, twaHash }, "refunded user after TX2 submit failure");
       return res.status(500).json({ error: "Swap could not be submitted — your tokens have been refunded.", refundHash });
-    } catch (recErr) {
-      req.log.error({ recErr, twaHash }, "TX2 submit recovery failed — tokens may be in pool");
+    } catch (refundErr) {
+      req.log.error({ refundErr, twaHash }, "TX2 submit refund also failed");
     }
-    return res.status(500).json({
-      error: "Swap failed — contact support with your transaction hash.",
-      twaHash,
-    });
+    return res.status(500).json({ error: "Swap failed — contact support with your transaction hash.", twaHash });
   }
 
-  // Wait for receipt
+  // Wait for TX2 receipt
   let swapReceipt: Awaited<ReturnType<typeof publicClient.waitForTransactionReceipt>>;
   try {
     swapReceipt = await publicClient.waitForTransactionReceipt({ hash: swapHash, confirmations: 1, timeout: 90_000 });
   } catch (receiptErr) {
-    // Receipt timeout — swap may have already mined. Return txHash. Do NOT attempt refund.
     req.log.error({ err: receiptErr, swapHash, twaHash }, "TX2 receipt timeout — returning txHash");
     return res.status(200).json({
-      txHash:           swapHash,
-      tokenIn,
-      tokenOut,
-      amountIn,
-      amountOutAfterFee: freshAmountOut.toString(),
-      warning:          "Swap submitted but receipt timed out — please verify on BaseScan",
+      txHash:            swapHash,
+      tokenIn, tokenOut, amountIn,
+      amountOutAfterFee: quoteAmountOut.toString(),
+      warning:           "Swap submitted but receipt timed out — please verify on BaseScan",
     });
   }
 
   if (swapReceipt.status !== "success") {
-    // pool.swap reverted — try to skim the deposited tokens back
-    req.log.error({ swapHash, twaHash, status: swapReceipt.status }, "TX2 (pool.swap) reverted");
+    // TX2 reverted — relay still holds tokenIn → refund user
+    req.log.error({ swapHash, twaHash, status: swapReceipt.status }, "TX2 (router.swapExactTokensForTokens) reverted");
     try {
-      const skimHash = await writeWithRetry(
-        () => relayer.client.writeContract({
-          chain: base, account: relayer.account,
-          address: poolAddress, abi: POOL_ABI,
-          functionName: "skim",
-          args: [relayer.account.address],
-        }),
-        "TX2-revert-recovery skim",
-      );
-      await publicClient.waitForTransactionReceipt({ hash: skimHash, confirmations: 1 });
       const refundHash = await writeWithRetry(
         () => relayer.client.writeContract({
           chain: base, account: relayer.account,
@@ -519,27 +492,25 @@ router.post("/swap/execute", async (req, res) => {
           functionName: "transfer",
           args: [owner as `0x${string}`, amountBig],
         }),
-        "TX2-revert-recovery refund",
+        "TX2-revert refund",
       );
       req.log.info({ refundHash, swapHash, twaHash }, "refunded user after TX2 revert");
       return res.status(500).json({ error: "Swap reverted on-chain — your tokens have been refunded.", refundHash });
     } catch (recErr) {
-      req.log.error({ recErr, swapHash, twaHash }, "TX2 revert recovery failed");
+      req.log.error({ recErr, swapHash, twaHash }, "TX2 revert refund failed");
     }
     return res.status(500).json({ error: "Swap reverted — contact support.", swapHash, twaHash });
   }
 
   req.log.info(
-    { swapHash, twaHash, amountIn, amountOut: freshAmountOut.toString(), owner, poolAddress },
-    "gasless swap complete — relay wallet never held user tokens",
+    { swapHash, twaHash, amountIn, amountOut: quoteAmountOut.toString(), owner, stable },
+    "gasless swap complete via Aerodrome Router",
   );
 
   return res.json({
-    txHash:           swapHash,
-    tokenIn,
-    tokenOut,
-    amountIn,
-    amountOutAfterFee: freshAmountOut.toString(),
+    txHash:            swapHash,
+    tokenIn, tokenOut, amountIn,
+    amountOutAfterFee: quoteAmountOut.toString(),
   });
 });
 

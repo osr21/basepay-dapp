@@ -19,8 +19,10 @@ export interface SwapQuoteResult {
   protocolFeeAmount: string;
   /** Net output amount the user receives (= amountOut when fee is 0) */
   amountOutAfterFee: string;
-  /** Aerodrome pool address — use as the EIP-3009 transferWithAuthorization recipient */
+  /** Aerodrome pool address used for the swap */
   poolAddress: string;
   /** Whether the best Aerodrome pool is stable (true) or volatile (false) */
   stable?: boolean;
+  /** Relay wallet address — use as the EIP-3009 transferWithAuthorization recipient when signing */
+  relayerAddress?: string;
 }

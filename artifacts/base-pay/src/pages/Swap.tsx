@@ -94,11 +94,11 @@ export default function SwapPage() {
   const { signAuthorization } = useUsdcAuthorization(address, fromToken);
   const { mutateAsync: execSwap } = useExecuteGaslessSwap();
 
-  // poolAddress from quote is used as the EIP-3009 authorization recipient
-  const canSwap = !!amountBig && amountBig > 0n && !!quote && !!quote.poolAddress && step === "idle" && isConnected && chainId === base.id;
+  // relayerAddress from quote is used as the EIP-3009 authorization recipient
+  const canSwap = !!amountBig && amountBig > 0n && !!quote && !!quote.relayerAddress && step === "idle" && isConnected && chainId === base.id;
 
   async function handleSwap() {
-    if (!canSwap || !address || !quote?.poolAddress) return;
+    if (!canSwap || !address || !quote?.relayerAddress) return;
     setError(undefined);
 
     if (fromBal !== undefined && amountBig! > fromBal) {
@@ -108,9 +108,10 @@ export default function SwapPage() {
 
     try {
       setStep("signing");
-      // Sign EIP-3009: authorize transfer directly from user wallet to the Aerodrome pool.
-      // The relay wallet never receives the tokens — it only submits the transaction.
-      const auth = await signAuthorization(quote.poolAddress as `0x${string}`, amountBig!, 1_800);
+      // Sign EIP-3009: authorize transfer from user wallet to the relay wallet.
+      // The relay wallet temporarily holds the tokens, then swaps via the Aerodrome
+      // Router in a single atomic transaction (no race condition).
+      const auth = await signAuthorization(quote.relayerAddress as `0x${string}`, amountBig!, 1_800);
 
       setStep("swapping");
       const result = await execSwap({
@@ -119,8 +120,8 @@ export default function SwapPage() {
           tokenOut:    toToken.address,
           amountIn:    amountBig!.toString(),
           owner:       address,
-          // poolAddress must match what we signed the EIP-3009 authorization for
-          poolAddress: quote.poolAddress,
+          // stable must match the pool type used for the quote
+          stable:      quote.stable ?? false,
           validAfter:  auth.validAfter.toString(),
           validBefore: auth.validBefore.toString(),
           nonce:       auth.nonce,

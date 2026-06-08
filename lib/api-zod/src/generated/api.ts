@@ -162,8 +162,9 @@ export const GetSwapQuoteResponse = zod.object({
   "protocolFeeBps": zod.number().describe('BasePay protocol fee in basis points (0 = free)'),
   "protocolFeeAmount": zod.string().describe('Protocol fee amount in atomic units (0 for current version)'),
   "amountOutAfterFee": zod.string().describe('Net output amount the user receives (= amountOut when fee is 0)'),
-  "poolAddress": zod.string().describe('Aerodrome pool address — use as the EIP-3009 transferWithAuthorization recipient'),
-  "stable": zod.boolean().optional().describe('Whether the best Aerodrome pool is stable (true) or volatile (false)')
+  "poolAddress": zod.string().describe('Aerodrome pool address used for the swap'),
+  "stable": zod.boolean().optional().describe('Whether the best Aerodrome pool is stable (true) or volatile (false)'),
+  "relayerAddress": zod.string().optional().describe('Relay wallet address — use as the EIP-3009 transferWithAuthorization recipient when signing')
 })
 
 
@@ -175,7 +176,7 @@ export const ExecuteGaslessSwapBody = zod.object({
   "tokenOut": zod.string().describe('Output token contract address (USDC or EURC)'),
   "amountIn": zod.string().describe('Input amount in atomic units (6 decimals) as decimal string'),
   "owner": zod.string().describe('Wallet address of the token owner (signer of the EIP-3009 authorization)'),
-  "poolAddress": zod.string().describe('Aerodrome pool address the user signed the EIP-3009 authorization for (from \/swap\/quote)'),
+  "stable": zod.boolean().describe('Whether to use the stable (true) or volatile (false) Aerodrome pool (from \/swap\/quote)'),
   "validAfter": zod.string().describe('EIP-3009 validAfter Unix timestamp (seconds, decimal string)'),
   "validBefore": zod.string().describe('EIP-3009 validBefore Unix timestamp (seconds, decimal string)'),
   "nonce": zod.string().describe('EIP-3009 random nonce (0x-prefixed 32-byte hex)'),

@@ -516,7 +516,7 @@ components:
       properties:
         relayFeeUsdc:
           type: string
-          description: USDC fee charged per relay (e.g. "0.00" = free)
+          description: USDC fee charged per relay (human-readable, e.g. "0.30" for 0.3%)
         relayerReady:
           type: boolean
           description: Whether the relayer wallet has enough ETH to submit txs
@@ -526,10 +526,16 @@ components:
         networkName:
           type: string
           description: Network name (e.g. "Base Mainnet")
+        relayerAddress:
+          type: string
+          description: Relay wallet address — use as the EIP-3009 transferWithAuthorization recipient when signing gasless transfers
+        feeBps:
+          type: integer
+          description: Protocol fee in basis points (e.g. 30 = 0.3%)
 
     GaslessTransferInput:
       type: object
-      required: [from, to, value, validAfter, validBefore, nonce, v, r, s]
+      required: [from, to, recipient, value, validAfter, validBefore, nonce, v, r, s]
       properties:
         token:
           type: string
@@ -541,7 +547,13 @@ components:
           description: Sender address (signer of the authorization)
         to:
           type: string
-          description: Recipient address
+          description: >
+            EIP-3009 authorization recipient — must equal the relay wallet address
+            (obtained from GET /gasless/fee relayerAddress). The relay holds funds
+            temporarily and forwards (value - fee) to recipient.
+        recipient:
+          type: string
+          description: Actual end-recipient address — where (value - protocolFee) is delivered
         value:
           type: string
           description: Amount in token atomic units (6 decimals), as decimal string
@@ -566,7 +578,7 @@ components:
 
     GaslessTransferResult:
       type: object
-      required: [txHash, from, to, value, token]
+      required: [txHash, from, to, recipient, value, token, feeAmount, feeBps]
       properties:
         txHash:
           type: string
@@ -578,9 +590,19 @@ components:
           type: string
         to:
           type: string
+          description: EIP-3009 authorization recipient (relay wallet address)
+        recipient:
+          type: string
+          description: Actual end-recipient address that received (value - feeAmount)
         value:
           type: string
-          description: Amount transferred in atomic units
+          description: Gross amount in atomic units (as signed in the EIP-3009 authorization)
+        feeAmount:
+          type: string
+          description: Protocol fee deducted in atomic units
+        feeBps:
+          type: integer
+          description: Protocol fee rate in basis points
 
     SwapQuoteResult:
       type: object

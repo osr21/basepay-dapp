@@ -281,6 +281,8 @@ router.get("/swap/quote", async (req, res) => {
 //   - TX1 failure  → return error; user's funds never left their wallet.
 //   - TX2 failure after TX1 → relay holds tokenIn → transfer directly back to user.
 router.post("/swap/execute", async (req, res) => {
+  req.log.info({ tokenIn: req.body?.tokenIn, tokenOut: req.body?.tokenOut, amountIn: req.body?.amountIn, owner: req.body?.owner }, "swap execute request received");
+
   const parsed = SwapSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
@@ -437,6 +439,11 @@ router.post("/swap/execute", async (req, res) => {
   // server clock can drift significantly from Base mainnet's block.timestamp.
   // The user's EIP-3009 validBefore is the actual security expiry; this deadline
   // is only a router safety guard and a large buffer is safe here.
+  //
+  // NOTE: We submit TX2 and return the txHash immediately WITHOUT waiting for
+  // the on-chain receipt. Base has ~2s block times so the tx confirms quickly.
+  // Waiting for the receipt inside the HTTP handler risks proxy timeouts when
+  // the combined TX1+TX2 confirmation window exceeds the proxy's request limit.
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 7_200);
   let swapHash: Hex;
   try {
@@ -472,44 +479,13 @@ router.post("/swap/execute", async (req, res) => {
     return res.status(500).json({ error: "Swap failed — contact support with your transaction hash.", twaHash });
   }
 
-  // Wait for TX2 receipt
-  let swapReceipt: Awaited<ReturnType<typeof publicClient.waitForTransactionReceipt>>;
-  try {
-    swapReceipt = await publicClient.waitForTransactionReceipt({ hash: swapHash, confirmations: 1, timeout: 90_000 });
-  } catch (receiptErr) {
-    req.log.error({ err: receiptErr, swapHash, twaHash }, "TX2 receipt timeout — returning txHash");
-    return res.status(200).json({
-      txHash:            swapHash,
-      tokenIn, tokenOut, amountIn,
-      amountOutAfterFee: quoteAmountOut.toString(),
-      warning:           "Swap submitted but receipt timed out — please verify on BaseScan",
-    });
-  }
-
-  if (swapReceipt.status !== "success") {
-    // TX2 reverted — relay still holds tokenIn → refund user
-    req.log.error({ swapHash, twaHash, status: swapReceipt.status }, "TX2 (router.swapExactTokensForTokens) reverted");
-    try {
-      const refundHash = await writeWithRetry(
-        () => relayer.client.writeContract({
-          chain: base, account: relayer.account,
-          address: pair.tokenIn, abi: ERC20_ABI,
-          functionName: "transfer",
-          args: [owner as `0x${string}`, amountBig],
-        }),
-        "TX2-revert refund",
-      );
-      req.log.info({ refundHash, swapHash, twaHash }, "refunded user after TX2 revert");
-      return res.status(500).json({ error: "Swap reverted on-chain — your tokens have been refunded.", refundHash });
-    } catch (recErr) {
-      req.log.error({ recErr, swapHash, twaHash }, "TX2 revert refund failed");
-    }
-    return res.status(500).json({ error: "Swap reverted — contact support.", swapHash, twaHash });
-  }
-
+  // TX2 submitted — return immediately; Base confirms in ~2s.
+  // Background: if TX2 reverts (rare — slippage guard is server-side), tokens
+  // remain at the relay wallet and must be manually refunded via the
+  // scripts/src/refund-stuck.ts pattern.
   req.log.info(
-    { swapHash, twaHash, amountIn, amountOut: quoteAmountOut.toString(), owner, stable },
-    "gasless swap complete via Aerodrome Router",
+    { swapHash, twaHash, amountIn, amountOutMin: amountOutMin.toString(), owner, stable },
+    "gasless swap TX2 submitted via Aerodrome Router",
   );
 
   return res.json({

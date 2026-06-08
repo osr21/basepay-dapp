@@ -14,6 +14,8 @@ import {
 } from "viem";
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
+import { createPrivateKey } from "crypto";
+import { SignJWT } from "jose";
 import { db, gaslessNoncesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -21,25 +23,88 @@ import { z } from "zod";
 const router = Router();
 
 // ── x402 payment configuration ────────────────────────────────────────────────
-// The payTo address receives USDC for each paid relay.
 const _rawPayTo = process.env.FEE_COLLECTOR_ADDRESS ?? "";
 const PAY_TO: `0x${string}` | "" =
   _rawPayTo.startsWith("0x") && _rawPayTo.length === 42
     ? (_rawPayTo as `0x${string}`)
     : "";
-const RELAY_PRICE = "$0.001"; // 0.1¢ USDC per relay
-const BASE_CHAIN_ID = "eip155:8453"; // Base Mainnet
+const RELAY_PRICE    = "$0.001"; // 0.1¢ USDC per relay
+const BASE_CHAIN_ID  = "eip155:8453"; // Base Mainnet
 
+// ── Facilitator selection ─────────────────────────────────────────────────────
+// When CDP credentials are present we use the Coinbase CDP mainnet facilitator
+// (supports eip155:8453). Without them we fall back to the public x402.org
+// facilitator which only supports Base Sepolia — payment gate returns 503.
+const CDP_FACILITATOR_URL    = "https://api.cdp.coinbase.com/platform/x402/facilitator";
+const PUBLIC_FACILITATOR_URL = "https://x402.org/facilitator";
+
+function hasCdpCredentials(): boolean {
+  return !!(process.env.CDP_API_KEY_NAME && process.env.CDP_API_KEY_PRIVATE_KEY);
+}
+
+/**
+ * Generates fresh CDP JWT credentials for each x402 facilitator call.
+ * Tokens are scoped per-endpoint and expire after 2 minutes.
+ *
+ * CDP API key format (from portal.cdp.coinbase.com JSON download):
+ *   name:       "organizations/<org_id>/apiKeys/<key_id>"
+ *   privateKey: EC P-256 or Ed25519 PEM (auto-detected)
+ */
+async function createCdpAuthHeaders(): Promise<{
+  verify:    Record<string, string>;
+  settle:    Record<string, string>;
+  supported: Record<string, string>;
+}> {
+  const keyName = process.env.CDP_API_KEY_NAME!;
+  // Replit secrets preserve literal \n — normalize to real newlines
+  const pem = process.env.CDP_API_KEY_PRIVATE_KEY!.replace(/\\n/g, "\n");
+
+  const privateKey = createPrivateKey(pem);
+  // Auto-detect algorithm from key type
+  const alg = privateKey.asymmetricKeyType === "ed25519" ? "EdDSA" : "ES256";
+
+  const host     = "api.cdp.coinbase.com";
+  const basePath = "/platform/x402/facilitator";
+  const now      = Math.floor(Date.now() / 1000);
+
+  const makeJwt = (method: string, endpoint: string) =>
+    new SignJWT({
+      iss: keyName,
+      sub: keyName,
+      nbf: now,
+      uri: `${method} ${host}${basePath}/${endpoint}`,
+    })
+      .setProtectedHeader({ alg, kid: keyName })
+      .setExpirationTime(now + 120)
+      .sign(privateKey);
+
+  const [verifyJwt, settleJwt, supportedJwt] = await Promise.all([
+    makeJwt("POST", "verify"),
+    makeJwt("POST", "settle"),
+    makeJwt("GET",  "supported"),
+  ]);
+
+  return {
+    verify:    { Authorization: `Bearer ${verifyJwt}` },
+    settle:    { Authorization: `Bearer ${settleJwt}` },
+    supported: { Authorization: `Bearer ${supportedJwt}` },
+  };
+}
+
+// ── Middleware singleton ───────────────────────────────────────────────────────
 let _x402Middleware: ReturnType<typeof paymentMiddleware> | null = null;
-// "unknown" → not yet checked; "ok" → facilitator supports our network; "unavailable" → it doesn't
 let _facilitatorStatus: "unknown" | "ok" | "unavailable" = "unknown";
 
 function getX402Middleware(): ReturnType<typeof paymentMiddleware> {
   if (_x402Middleware) return _x402Middleware;
 
-  const facilitatorClient = new HTTPFacilitatorClient({
-    url: "https://x402.org/facilitator",
-  });
+  const useCdp = hasCdpCredentials();
+
+  const facilitatorClient = new HTTPFacilitatorClient(
+    useCdp
+      ? { url: CDP_FACILITATOR_URL, createAuthHeaders: createCdpAuthHeaders }
+      : { url: PUBLIC_FACILITATOR_URL },
+  );
 
   const resourceServer = new x402ResourceServer(facilitatorClient).register(
     BASE_CHAIN_ID,
@@ -50,10 +115,10 @@ function getX402Middleware(): ReturnType<typeof paymentMiddleware> {
     {
       "POST /v2/relay": {
         accepts: {
-          scheme: "exact",
-          price: RELAY_PRICE,
+          scheme:  "exact",
+          price:   RELAY_PRICE,
           network: BASE_CHAIN_ID,
-          payTo: PAY_TO || "0x0000000000000000000000000000000000000000",
+          payTo:   PAY_TO || "0x0000000000000000000000000000000000000000",
         },
         description: "Gasless USDC relay — BasePay developer API",
       },
@@ -65,11 +130,9 @@ function getX402Middleware(): ReturnType<typeof paymentMiddleware> {
 }
 
 /**
- * Wraps the x402 paymentMiddleware and intercepts configuration-error responses
- * (status 500 with "Route Configuration Errors" body) that the library emits when
- * the public facilitator doesn't support the configured chain/scheme. On detection
- * we flip `_facilitatorStatus` to "unavailable" so subsequent requests short-circuit
- * immediately instead of re-invoking the middleware.
+ * Wraps paymentMiddleware and intercepts configuration-error responses.
+ * For the CDP facilitator these should never occur (mainnet is supported).
+ * Kept as a safety net in case credentials are wrong or service is down.
  */
 function x402Gate(
   req: Parameters<ReturnType<typeof paymentMiddleware>>[0],
@@ -77,17 +140,18 @@ function x402Gate(
   next: Parameters<ReturnType<typeof paymentMiddleware>>[2],
 ) {
   if (_facilitatorStatus === "unavailable") {
+    const useCdp = hasCdpCredentials();
     return res.status(503).json({
-      error: "x402 payment facilitation unavailable for this network",
-      detail: `The public facilitator (x402.org) does not support ${BASE_CHAIN_ID}. ` +
-        "Configure a mainnet facilitator (e.g. Coinbase CDP) for production use.",
+      error:  "x402 payment facilitation unavailable",
+      detail: useCdp
+        ? "CDP facilitator returned a configuration error. Check CDP_API_KEY_NAME and CDP_API_KEY_PRIVATE_KEY."
+        : `The public facilitator (x402.org) does not support ${BASE_CHAIN_ID}. Set CDP_API_KEY_NAME + CDP_API_KEY_PRIVATE_KEY for mainnet.`,
       docs: "https://www.x402.org",
     });
   }
 
   const origJson = res.json.bind(res) as typeof res.json;
 
-  // Intercept the middleware's 500 "Route Configuration Errors" response
   (res as typeof res & { json: typeof res.json }).json = (body: unknown) => {
     const isConfigError =
       res.statusCode === 500 &&
@@ -99,19 +163,16 @@ function x402Gate(
         (body as { error: string }).error.includes("does not support") ||
         (body as { error: string }).error.includes("no supported payment kinds"));
 
-    // Restore before any further calls to prevent double-wrapping
     (res as typeof res & { json: typeof res.json }).json = origJson;
 
     if (isConfigError) {
       _facilitatorStatus = "unavailable";
-      req.log.warn(
-        { network: BASE_CHAIN_ID },
-        "x402 facilitator does not support this network — payment gate disabled",
-      );
+      req.log.warn({ network: BASE_CHAIN_ID, cdp: hasCdpCredentials() }, "x402 facilitator config error");
       return res.status(503).json({
-        error: "x402 payment facilitation unavailable for this network",
-        detail: `The public facilitator (x402.org) does not support ${BASE_CHAIN_ID}. ` +
-          "Configure a mainnet facilitator (e.g. Coinbase CDP) for production use.",
+        error:  "x402 payment facilitation unavailable",
+        detail: hasCdpCredentials()
+          ? "CDP facilitator returned a configuration error. Verify your CDP API key has x402 access."
+          : `The public facilitator (x402.org) does not support ${BASE_CHAIN_ID}.`,
         docs: "https://www.x402.org",
       });
     }
@@ -124,11 +185,11 @@ function x402Gate(
 }
 
 // ── Chain clients (singletons) ────────────────────────────────────────────────
-const transport = http("https://mainnet.base.org");
+const transport    = http("https://mainnet.base.org");
 const publicClient = createPublicClient({ chain: base, transport });
 
 type Relayer = {
-  client: ReturnType<typeof createWalletClient>;
+  client:  ReturnType<typeof createWalletClient>;
   account: ReturnType<typeof privateKeyToAccount>;
 };
 let _relayer: Relayer | null = null;
@@ -137,9 +198,9 @@ function getRelayer(): Relayer {
   if (_relayer) return _relayer;
   const pk = process.env.DEPLOYER_PRIVATE_KEY;
   if (!pk) throw new Error("DEPLOYER_PRIVATE_KEY not set");
-  const key = pk.startsWith("0x") ? (pk as Hex) : (`0x${pk}` as Hex);
+  const key     = pk.startsWith("0x") ? (pk as Hex) : (`0x${pk}` as Hex);
   const account = privateKeyToAccount(key);
-  const client = createWalletClient({ account, chain: base, transport });
+  const client  = createWalletClient({ account, chain: base, transport });
   _relayer = { client, account };
   return _relayer;
 }
@@ -153,7 +214,7 @@ const USDC_ABI = parseAbi([
 ]);
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-const MAX_VALUE = 1_000_000_000_000n; // 1M USDC
+const MAX_VALUE    = 1_000_000_000_000n; // 1M USDC
 
 const X402RelaySchema = z.object({
   from:        z.string().refine(isAddress, "invalid from address"),
@@ -169,24 +230,23 @@ const X402RelaySchema = z.object({
 
 const pendingNonces = new Set<string>();
 
-// ── GET /api/v2/relay/info — describe x402 requirements ───────────────────────
+// ── GET /api/v2/relay/info ─────────────────────────────────────────────────────
 router.get("/v2/relay/info", (_req, res) => {
+  const useCdp = hasCdpCredentials();
   res.json({
-    version: "v2",
-    protocol: "x402",
-    price: RELAY_PRICE,
-    network: BASE_CHAIN_ID,
-    payTo: PAY_TO || null,
-    facilitator: "https://x402.org/facilitator",
-    description:
-      "x402-gated USDC relay. Include a valid x402 payment header to access POST /api/v2/relay.",
-    docs: "https://www.x402.org",
+    version:     "v2",
+    protocol:    "x402",
+    price:       RELAY_PRICE,
+    network:     BASE_CHAIN_ID,
+    payTo:       PAY_TO || null,
+    facilitator: useCdp ? CDP_FACILITATOR_URL : PUBLIC_FACILITATOR_URL,
+    mainnet:     useCdp,
+    description: "x402-gated USDC relay. Include a valid x402 payment header to access POST /api/v2/relay.",
+    docs:        "https://www.x402.org",
   });
 });
 
 // ── POST /api/v2/relay — x402-gated relay endpoint ────────────────────────────
-// The x402 paymentMiddleware intercepts this, validates the USDC micro-payment,
-// then passes the request through to the relay handler below.
 router.post(
   "/v2/relay",
   (req, res, next) => {
@@ -205,16 +265,16 @@ router.post(
     const { from, to, value, validAfter, validBefore, nonce, v, r, s } = parsed.data;
     const valueBig = BigInt(value);
 
-    if (valueBig === 0n) return res.status(400).json({ error: "Value must be greater than zero" });
-    if (valueBig > MAX_VALUE) return res.status(400).json({ error: "Value exceeds 1,000,000 USDC limit" });
-    if (from.toLowerCase() === ZERO_ADDRESS) return res.status(400).json({ error: "Invalid sender address" });
-    if (to.toLowerCase() === ZERO_ADDRESS) return res.status(400).json({ error: "Invalid recipient address" });
+    if (valueBig === 0n)                         return res.status(400).json({ error: "Value must be greater than zero" });
+    if (valueBig > MAX_VALUE)                    return res.status(400).json({ error: "Value exceeds 1,000,000 USDC limit" });
+    if (from.toLowerCase() === ZERO_ADDRESS)     return res.status(400).json({ error: "Invalid sender address" });
+    if (to.toLowerCase() === ZERO_ADDRESS)       return res.status(400).json({ error: "Invalid recipient address" });
     if (from.toLowerCase() === to.toLowerCase()) return res.status(400).json({ error: "Sender and recipient must differ" });
 
     const now = BigInt(Math.floor(Date.now() / 1000));
     if (BigInt(validBefore) <= BigInt(validAfter)) return res.status(400).json({ error: "validBefore must be after validAfter" });
-    if (now < BigInt(validAfter)) return res.status(400).json({ error: "Authorization not yet valid" });
-    if (now >= BigInt(validBefore)) return res.status(400).json({ error: "Authorization has expired" });
+    if (now < BigInt(validAfter))                  return res.status(400).json({ error: "Authorization not yet valid" });
+    if (now >= BigInt(validBefore))                return res.status(400).json({ error: "Authorization has expired" });
 
     if (pendingNonces.has(nonce)) return res.status(400).json({ error: "Nonce is already being processed" });
     pendingNonces.add(nonce);
@@ -228,16 +288,16 @@ router.post(
       if (existing.length > 0) return res.status(400).json({ error: "Nonce already used" });
 
       const alreadyUsed = await publicClient.readContract({
-        address: USDC_ADDRESS,
-        abi: USDC_ABI,
+        address:      USDC_ADDRESS,
+        abi:          USDC_ABI,
         functionName: "authorizationState",
         args: [from as `0x${string}`, nonce as `0x${string}`],
       });
       if (alreadyUsed) return res.status(400).json({ error: "Nonce already used on-chain" });
 
       const senderBal = await publicClient.readContract({
-        address: USDC_ADDRESS,
-        abi: USDC_ABI,
+        address:      USDC_ADDRESS,
+        abi:          USDC_ABI,
         functionName: "balanceOf",
         args: [from as `0x${string}`],
       });
@@ -251,7 +311,7 @@ router.post(
       }
 
       const calldata = encodeFunctionData({
-        abi: USDC_ABI,
+        abi:          USDC_ABI,
         functionName: "transferWithAuthorization",
         args: [
           from        as `0x${string}`,
@@ -269,13 +329,13 @@ router.post(
       let txHash: Hex;
       try {
         txHash = await relayer.client.sendTransaction({
-          chain: base,
+          chain:   base,
           account: relayer.account,
-          to: USDC_ADDRESS,
-          data: calldata as Hex,
+          to:      USDC_ADDRESS,
+          data:    calldata as Hex,
         });
       } catch (err: unknown) {
-        const raw = err instanceof Error ? err.message : "Relay failed";
+        const raw   = err instanceof Error ? err.message : "Relay failed";
         const match =
           raw.match(/reverted with the following reason:\s*\n(.+)/m)
           ?? raw.match(/Error: (.+?)(?:\n|$)/);
@@ -289,7 +349,7 @@ router.post(
         .values({ nonce, senderAddress: from.toLowerCase(), txHash })
         .onConflictDoNothing();
 
-      req.log.info({ txHash, from, to, value }, "x402 relay completed");
+      req.log.info({ txHash, from, to, value, cdp: hasCdpCredentials() }, "x402 relay completed");
       return res.json({ txHash, from, to, value, protocol: "x402" });
     } finally {
       pendingNonces.delete(nonce);

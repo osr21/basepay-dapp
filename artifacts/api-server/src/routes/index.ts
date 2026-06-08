@@ -7,7 +7,6 @@ import appRouter from "./app";
 import gaslessRouter from "./gasless";
 import swapRouter from "./swap";
 import x402relayRouter from "./x402relay";
-import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -19,6 +18,5 @@ router.use(appRouter);
 router.use(gaslessRouter);
 router.use(swapRouter);
 router.use(x402relayRouter);
-router.use(adminRouter);
 
 export default router;

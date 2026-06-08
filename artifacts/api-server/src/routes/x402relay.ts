@@ -42,6 +42,21 @@ function hasCdpCredentials(): boolean {
   return !!(process.env.CDP_API_KEY_NAME && process.env.CDP_API_KEY_PRIVATE_KEY);
 }
 
+// ── CDP private key cache ─────────────────────────────────────────────────────
+// Parsed once per process — PEM parsing is cheap but unnecessary per-request.
+type CdpKey = { key: ReturnType<typeof createPrivateKey>; alg: string };
+let _cdpKey: CdpKey | null = null;
+
+function getCdpKey(): CdpKey {
+  if (_cdpKey) return _cdpKey;
+  // Replit secrets preserve literal \n — normalize to real newlines
+  const pem = process.env.CDP_API_KEY_PRIVATE_KEY!.replace(/\\n/g, "\n");
+  const key  = createPrivateKey(pem);
+  const alg  = key.asymmetricKeyType === "ed25519" ? "EdDSA" : "ES256";
+  _cdpKey = { key, alg };
+  return _cdpKey;
+}
+
 /**
  * Generates fresh CDP JWT credentials for each x402 facilitator call.
  * Tokens are scoped per-endpoint and expire after 2 minutes.
@@ -56,12 +71,7 @@ async function createCdpAuthHeaders(): Promise<{
   supported: Record<string, string>;
 }> {
   const keyName = process.env.CDP_API_KEY_NAME!;
-  // Replit secrets preserve literal \n — normalize to real newlines
-  const pem = process.env.CDP_API_KEY_PRIVATE_KEY!.replace(/\\n/g, "\n");
-
-  const privateKey = createPrivateKey(pem);
-  // Auto-detect algorithm from key type
-  const alg = privateKey.asymmetricKeyType === "ed25519" ? "EdDSA" : "ES256";
+  const { key: privateKey, alg } = getCdpKey();
 
   const host     = "api.cdp.coinbase.com";
   const basePath = "/platform/x402/facilitator";

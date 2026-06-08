@@ -147,6 +147,11 @@ const MAX_AMOUNT    = 10_000_000_000n; // 10,000 tokens (6 dec)
 const MAX_SLIP_BPS  = 100n;            // 1% slippage guard on quote
 const MIN_RELAY_ETH = 1_000_000_000_000_000n; // 0.001 ETH minimum in relay wallet
 
+// ── In-memory pending-nonce guard ─────────────────────────────────────────────
+// Keyed as "<tokenIn_lc>:<nonce_lc>" — prevents concurrent duplicate swap
+// submissions from both passing validation before TX1 lands on-chain.
+const pendingNonces = new Set<string>();
+
 // ── Pool auto-discovery ────────────────────────────────────────────────────────
 // Tries stable + volatile, returns the pool with the better quote.
 type AeroQuote = { amountOut: bigint; stable: boolean; poolAddress: `0x${string}` };
@@ -314,6 +319,16 @@ router.post("/swap/execute", async (req, res) => {
   if (validBeforeBig <= validAfterBig) {
     return res.status(400).json({ error: "validBefore must be after validAfter" });
   }
+
+  // ── Concurrent-nonce guard ────────────────────────────────────────────────
+  const nonceKey = `${pair.tokenIn.toLowerCase()}:${nonce.toLowerCase()}`;
+  if (pendingNonces.has(nonceKey)) {
+    return res.status(400).json({ error: "This nonce is already being processed — do not submit duplicate requests" });
+  }
+  pendingNonces.add(nonceKey);
+
+  // Everything from here must release the nonce on exit
+  try {
 
   let relayer: Relayer;
   try { relayer = getRelayer(); } catch {
@@ -508,13 +523,41 @@ router.post("/swap/execute", async (req, res) => {
     return res.status(500).json({ error: "Swap failed — contact support with your transaction hash.", twaHash });
   }
 
-  // TX2 submitted — return immediately; Base confirms in ~2s.
-  // Background: if TX2 reverts (rare — slippage guard is server-side), tokens
-  // remain at the relay wallet and must be manually refunded via the
-  // scripts/src/refund-stuck.ts pattern.
+  // Wait for TX2 confirmation — detect on-chain reverts and auto-refund.
+  // Base confirms in ~2s; waiting here keeps the response honest and prevents
+  // silent fund loss when the swap reverts (e.g. slippage exceeded on-chain).
+  const swapReceipt = await publicClient.waitForTransactionReceipt({ hash: swapHash, confirmations: 1 });
+
+  if (swapReceipt.status !== "success") {
+    req.log.error({ swapHash, twaHash, owner }, "swap TX2 reverted on-chain — attempting auto-refund");
+    try {
+      const refundHash = await writeWithRetry(
+        () => relayer.client.writeContract({
+          chain: base, account: relayer.account,
+          address: pair.tokenIn, abi: ERC20_ABI,
+          functionName: "transfer",
+          args: [owner as `0x${string}`, amountBig],
+        }),
+        "TX2-revert auto-refund",
+      );
+      req.log.info({ refundHash, swapHash, twaHash }, "auto-refunded user after TX2 on-chain revert");
+      return res.status(500).json({
+        error: "Swap reverted on-chain (slippage or pool issue) — your tokens have been refunded.",
+        refundHash,
+      });
+    } catch (refundErr) {
+      req.log.error({ refundErr, swapHash, twaHash }, "auto-refund after TX2 revert failed — tokens at relay wallet");
+      return res.status(500).json({
+        error: "Swap reverted and auto-refund failed. Contact support with this transaction hash.",
+        twaHash,
+        swapHash,
+      });
+    }
+  }
+
   req.log.info(
     { swapHash, twaHash, amountIn, amountOutMin: amountOutMin.toString(), owner, stable },
-    "gasless swap TX2 submitted via Aerodrome Router",
+    "gasless swap completed via Aerodrome Router",
   );
 
   return res.json({
@@ -522,6 +565,10 @@ router.post("/swap/execute", async (req, res) => {
     tokenIn, tokenOut, amountIn,
     amountOutAfterFee: quoteAmountOut.toString(),
   });
+
+  } finally {
+    pendingNonces.delete(nonceKey);
+  }
 });
 
 export default router;

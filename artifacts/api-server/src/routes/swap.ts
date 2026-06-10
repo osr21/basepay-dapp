@@ -2,8 +2,6 @@ import { Router } from "express";
 import { logger } from "../lib/logger";
 import {
   createWalletClient,
-  createPublicClient,
-  http,
   parseAbi,
   isAddress,
   isHex,
@@ -12,12 +10,9 @@ import {
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
+import { baseTransport, basePublicClient as publicClient } from "../lib/rpc";
 
 const router = Router();
-
-// ── Chain clients ─────────────────────────────────────────────────────────────
-const transport    = http("https://mainnet.base.org");
-const publicClient = createPublicClient({ chain: base, transport });
 
 type Relayer = {
   client:  ReturnType<typeof createWalletClient>;
@@ -30,7 +25,7 @@ function getRelayer(): Relayer {
   if (!pk) throw new Error("DEPLOYER_PRIVATE_KEY not set");
   const key = pk.startsWith("0x") ? (pk as Hex) : (`0x${pk}` as Hex);
   const account = privateKeyToAccount(key);
-  const client  = createWalletClient({ account, chain: base, transport });
+  const client  = createWalletClient({ account, chain: base, transport: baseTransport });
   _relayer = { client, account };
   return _relayer;
 }

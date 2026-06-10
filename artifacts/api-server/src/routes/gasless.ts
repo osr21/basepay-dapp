@@ -1,8 +1,6 @@
 import { Router } from "express";
 import {
   createWalletClient,
-  createPublicClient,
-  http,
   parseAbi,
   encodeFunctionData,
   concat,
@@ -17,6 +15,7 @@ import { Attribution } from "ox/erc8021";
 import { db, gaslessNoncesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { baseTransport, basePublicClient as publicClient } from "../lib/rpc";
 
 // ── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
 const _builderCode = process.env.BASE_BUILDER_CODE;
@@ -25,10 +24,6 @@ const DATA_SUFFIX: Hex | undefined = _builderCode
   : undefined;
 
 const router = Router();
-
-// ── Chain clients (singletons — do not re-create per request) ────────────────
-const transport = http("https://mainnet.base.org");
-const publicClient = createPublicClient({ chain: base, transport });
 
 type Relayer = {
   client:  ReturnType<typeof createWalletClient>;
@@ -45,7 +40,7 @@ function getRelayer(): Relayer {
   const client  = createWalletClient({
     account,
     chain: base,
-    transport,
+    transport: baseTransport,
     ...(DATA_SUFFIX ? { dataSuffix: DATA_SUFFIX } : {}),
   });
   _relayer = { client, account };

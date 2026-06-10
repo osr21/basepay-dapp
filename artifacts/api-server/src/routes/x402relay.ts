@@ -4,8 +4,6 @@ import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import {
   createWalletClient,
-  createPublicClient,
-  http,
   parseAbi,
   encodeFunctionData,
   isAddress,
@@ -14,6 +12,7 @@ import {
 } from "viem";
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
+import { baseTransport, basePublicClient as publicClient } from "../lib/rpc";
 import { createPrivateKey } from "crypto";
 import { SignJWT } from "jose";
 import { db, gaslessNoncesTable } from "@workspace/db";
@@ -194,10 +193,7 @@ function x402Gate(
   return getX402Middleware()(req, res, next);
 }
 
-// ── Chain clients (singletons) ────────────────────────────────────────────────
-const transport    = http("https://mainnet.base.org");
-const publicClient = createPublicClient({ chain: base, transport });
-
+// ── Chain clients — see ../lib/rpc.ts (uses authenticated Coinbase node) ──────
 type Relayer = {
   client:  ReturnType<typeof createWalletClient>;
   account: ReturnType<typeof privateKeyToAccount>;
@@ -210,7 +206,7 @@ function getRelayer(): Relayer {
   if (!pk) throw new Error("DEPLOYER_PRIVATE_KEY not set");
   const key     = pk.startsWith("0x") ? (pk as Hex) : (`0x${pk}` as Hex);
   const account = privateKeyToAccount(key);
-  const client  = createWalletClient({ account, chain: base, transport });
+  const client  = createWalletClient({ account, chain: base, transport: baseTransport });
   _relayer = { client, account };
   return _relayer;
 }

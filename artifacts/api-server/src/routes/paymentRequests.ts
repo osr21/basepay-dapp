@@ -2,12 +2,9 @@ import { Router } from "express";
 import {
   isAddress,
   isHex,
-  createPublicClient,
-  http,
   parseAbi,
   type Hex,
 } from "viem";
-import { base } from "viem/chains";
 import { db, paymentRequestsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
@@ -17,6 +14,7 @@ import {
   UpdatePaymentRequestParams,
   UpdatePaymentRequestBody,
 } from "@workspace/api-zod";
+import { basePublicClient as publicClient } from "../lib/rpc";
 
 const router = Router();
 
@@ -27,7 +25,6 @@ const AMOUNT_RE       = /^\d+(\.\d{1,6})?$/; // positive decimal, up to 6 dp
 const TX_HASH_RE      = /^0x[0-9a-fA-F]{64}$/;
 
 // ── On-chain client for tx receipt verification ───────────────────────────────
-const publicClient = createPublicClient({ chain: base, transport: http("https://mainnet.base.org") });
 
 const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 const USDC_TRANSFER_EVENT = parseAbi([

@@ -36,6 +36,9 @@ export default function SwapPage() {
   const [txHash,         setTxHash]         = useState<string | undefined>();
   const [receivedAmount, setReceivedAmount] = useState<string | undefined>();
   const [error,          setError]          = useState<string | undefined>();
+  // True when an error occurred after the user already signed (i.e. TX1 may
+  // have been submitted). Warn user to check their balance before retrying.
+  const [errorAfterSign, setErrorAfterSign] = useState(false);
 
   // ── Balances ────────────────────────────────────────────────────────────────
   const { data: fromBalRaw, refetch: refetchFromBal } = useReadContract({
@@ -89,6 +92,7 @@ export default function SwapPage() {
   // Clear errors when amount or direction changes
   useEffect(() => {
     setError(undefined);
+    setErrorAfterSign(false);
   }, [amount, fromIdx]);
 
   const { signAuthorization } = useUsdcAuthorization(address, fromToken);
@@ -106,12 +110,14 @@ export default function SwapPage() {
       return;
     }
 
+    let passedSigning = false;
     try {
       setStep("signing");
       // Sign EIP-3009: authorize transfer from user wallet to the relay wallet.
       // The relay wallet temporarily holds the tokens, then swaps via the Aerodrome
       // Router in a single atomic transaction (no race condition).
       const auth = await signAuthorization(quote.relayerAddress as `0x${string}`, amountBig!, 1_800);
+      passedSigning = true;
 
       setStep("swapping");
       const result = await execSwap({
@@ -132,6 +138,7 @@ export default function SwapPage() {
         },
       });
 
+      setErrorAfterSign(false);
       setTxHash(result.txHash);
       setReceivedAmount(result.amountOutAfterFee);
       setStep("done");
@@ -141,13 +148,14 @@ export default function SwapPage() {
       const msg = err instanceof Error ? err.message : String(err);
       if (!msg.toLowerCase().includes("rejected") && !msg.toLowerCase().includes("denied")) {
         setError(msg.slice(0, 400));
+        setErrorAfterSign(passedSigning);
       }
       setStep("idle");
     }
   }
 
   function handleReset() {
-    setAmount(""); setStep("idle"); setTxHash(undefined); setReceivedAmount(undefined); setError(undefined);
+    setAmount(""); setStep("idle"); setTxHash(undefined); setReceivedAmount(undefined); setError(undefined); setErrorAfterSign(false);
   }
 
   function handleFlip() {
@@ -400,8 +408,13 @@ export default function SwapPage() {
         )}
 
         {error && (
-          <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
-            {error}
+          <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2 space-y-1">
+            <p>{error}</p>
+            {errorAfterSign && (
+              <p className="text-yellow-400 font-medium">
+                ⚠ The swap may still be processing on-chain. Check your {toToken.symbol} balance before retrying — if it arrived, no action needed.
+              </p>
+            )}
           </div>
         )}
 

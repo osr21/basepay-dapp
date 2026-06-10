@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isAddress } from "viem";
 import { db, paymentRequestsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { GetStatsParams } from "@workspace/api-zod";
@@ -12,10 +13,15 @@ router.get("/stats/:address", async (req, res) => {
   }
   const { address } = parsed.data;
 
+  if (!isAddress(address)) {
+    return res.status(400).json({ error: "address must be a valid Ethereum address" });
+  }
+
   const allRequests = await db
     .select()
     .from(paymentRequestsTable)
-    .where(eq(paymentRequestsTable.recipientAddress, address));
+    .where(eq(paymentRequestsTable.recipientAddress, address))
+    .limit(1000);
 
   const paid    = allRequests.filter(r => r.status === "paid");
   const pending = allRequests.filter(r => r.status === "pending");

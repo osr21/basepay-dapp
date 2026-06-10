@@ -109,6 +109,9 @@ router.get("/gasless/fee", async (_req, res) => {
     const ethBal = await publicClient.getBalance({ address: account.address });
     relayerEthBalance = formatEther(ethBal);
     relayerReady      = ethBal >= MIN_ETH;
+    // Blank out balance — we return only the boolean so callers cannot
+    // monitor relay wallet funds to time DoS/drain attacks.
+    relayerEthBalance = "";
   } catch {
     relayerReady = false;
   }
@@ -116,7 +119,6 @@ router.get("/gasless/fee", async (_req, res) => {
   return res.json({
     relayFeeUsdc: "0.00",
     relayerReady,
-    relayerEthBalance,
     networkName: "Base Mainnet",
   });
 });
@@ -214,7 +216,8 @@ router.post("/gasless/transfer", async (req, res) => {
     let relayer: Relayer;
     try {
       relayer = getRelayer();
-    } catch {
+    } catch (err) {
+      req.log.error({ err }, "getRelayer failed");
       return res.status(500).json({ error: "Relayer not configured" });
     }
 

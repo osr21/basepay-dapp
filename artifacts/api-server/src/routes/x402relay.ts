@@ -154,8 +154,8 @@ function x402Gate(
     return res.status(503).json({
       error:  "x402 payment facilitation unavailable",
       detail: useCdp
-        ? "CDP facilitator returned a configuration error. Check CDP_API_KEY_NAME and CDP_API_KEY_PRIVATE_KEY."
-        : `The public facilitator (x402.org) does not support ${BASE_CHAIN_ID}. Set CDP_API_KEY_NAME + CDP_API_KEY_PRIVATE_KEY for mainnet.`,
+        ? "CDP facilitator returned a configuration error. Check server credentials."
+        : `The public facilitator (x402.org) does not support ${BASE_CHAIN_ID}. Configure a mainnet-capable facilitator.`,
       docs: "https://www.x402.org",
     });
   }
@@ -316,7 +316,8 @@ router.post(
       let relayer: Relayer;
       try {
         relayer = getRelayer();
-      } catch {
+      } catch (err) {
+        req.log.error({ err }, "getRelayer failed");
         return res.status(500).json({ error: "Relayer not configured" });
       }
 

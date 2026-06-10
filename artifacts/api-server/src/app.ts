@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -10,6 +11,12 @@ const app: Express = express();
 // Trust the Replit proxy so that express-rate-limit can read the real client IP
 // from X-Forwarded-For without throwing a ValidationError.
 app.set("trust proxy", 1);
+
+// ── HTTP security headers ─────────────────────────────────────────────────────
+// Sets X-Content-Type-Options, X-Frame-Options, HSTS, X-DNS-Prefetch-Control,
+// Referrer-Policy, and more. contentSecurityPolicy is disabled for the API server
+// (no HTML served) to avoid blocking valid JSON responses.
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // ── Allowed origins ──────────────────────────────────────────────────────────
 // Accept the Replit dev/prod domain(s) and localhost for local development.

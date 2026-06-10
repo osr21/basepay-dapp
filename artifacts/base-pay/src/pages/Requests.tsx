@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAccount } from "wagmi";
-import { useListPaymentRequests, useUpdatePaymentRequest, getListPaymentRequestsQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useListPaymentRequests, getListPaymentRequestsQueryKey } from "@workspace/api-client-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { WalletButton } from "@/components/Layout";
 import { Link } from "wouter";
 
@@ -28,11 +28,25 @@ export default function RequestsPage() {
     { query: { enabled: !!address, queryKey: getListPaymentRequestsQueryKey({ recipientAddress: address }) } }
   );
 
-  const { mutate: updateRequest } = useUpdatePaymentRequest({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListPaymentRequestsQueryKey({ recipientAddress: address }) });
-      },
+  // Custom mutation that passes ?recipientAddress= for server-side ownership check.
+  // The generated hook does not support query params on PATCH, so we call fetch directly.
+  const { mutate: updateRequest } = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { status: string } }) => {
+      if (!address) throw new Error("Wallet not connected");
+      const url = `${import.meta.env.BASE_URL}api/payment-requests/${id}?recipientAddress=${address}`;
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? "Update failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getListPaymentRequestsQueryKey({ recipientAddress: address }) });
     },
   });
 

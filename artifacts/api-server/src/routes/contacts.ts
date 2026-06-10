@@ -27,7 +27,8 @@ router.get("/contacts", async (req, res) => {
   const rows = await db
     .select()
     .from(contactsTable)
-    .where(eq(contactsTable.ownerAddress, ownerAddress));
+    .where(eq(contactsTable.ownerAddress, ownerAddress))
+    .limit(500);
   return res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
 

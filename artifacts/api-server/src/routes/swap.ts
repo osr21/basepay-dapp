@@ -331,7 +331,8 @@ router.post("/swap/execute", async (req, res) => {
   try {
 
   let relayer: Relayer;
-  try { relayer = getRelayer(); } catch {
+  try { relayer = getRelayer(); } catch (err) {
+    logger.error({ err }, "getRelayer failed");
     return res.status(500).json({ error: "Relayer not configured" });
   }
 

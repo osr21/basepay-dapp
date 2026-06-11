@@ -94,15 +94,22 @@ app.use("/api", router);
 // ── Global error handler ──────────────────────────────────────────────────────
 // Must be declared after all routes. Catches any error forwarded via next(err)
 // or thrown inside async route handlers (Express 5 auto-forwards async throws).
+//
+// SECURITY: We intentionally do NOT forward err.message to the client in
+// production. Library errors can embed internal state (URLs, key names, RPC
+// responses) that leaks implementation details. Route handlers already return
+// specific, sanitised error messages; anything that reaches here is unexpected.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   const status = (err as { status?: number; statusCode?: number }).status
     ?? (err as { statusCode?: number }).statusCode
     ?? 500;
-  const message =
-    err instanceof Error ? err.message : "Internal server error";
   req.log?.error({ err }, "unhandled error");
   if (!res.headersSent) {
+    const isProduction = process.env.NODE_ENV === "production";
+    const message = isProduction
+      ? "Internal server error"
+      : (err instanceof Error ? err.message : "Internal server error");
     res.status(status).json({ error: message });
   }
 });

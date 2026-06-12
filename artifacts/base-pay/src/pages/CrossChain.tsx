@@ -455,25 +455,44 @@ export default function CrossChainPage() {
       {(phase === "idle" || phase === "error") && (
         <div className="rounded-xl border border-border bg-card/30 divide-y divide-border">
 
-          {/* Destination selector */}
-          <div className="p-4 space-y-2">
-            <label className="text-sm font-medium">Destination chain</label>
-            <div className="grid grid-cols-2 gap-2">
-              {DESTINATIONS.map((d, i) => (
-                <button
-                  key={d.label}
-                  onClick={() => setDestIndex(i)}
-                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                    i === destIndex
-                      ? "bg-primary/10 border-primary/40 text-primary"
-                      : "bg-secondary border-border text-muted-foreground hover:text-foreground hover:border-border/80"
-                  }`}
+          {/* Chain route: From Base → To [destination] */}
+          <div className="p-4 space-y-3">
+            <label className="text-sm font-medium">Transfer route</label>
+
+            {/* From / To row */}
+            <div className="flex items-center gap-2">
+              {/* From: Base (fixed) */}
+              <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border border-border bg-secondary/60">
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center">
+                  <svg width="14" height="14" viewBox="0 0 28 28" fill="none" className="text-blue-400"><circle cx="14" cy="14" r="14" fill="#0052FF"/><path d="M14.0002 4.6665C8.8454 4.6665 4.6669 8.845 4.6669 13.9998C4.6669 19.1547 8.8454 23.3332 14.0002 23.3332C19.1551 23.3332 23.3336 19.1547 23.3336 13.9998C23.3336 8.845 19.1551 4.6665 14.0002 4.6665ZM14.0002 19.8332C10.7786 19.8332 8.1669 17.2215 8.1669 13.9998C8.1669 10.7782 10.7786 8.1665 14.0002 8.1665C17.2219 8.1665 19.8336 10.7782 19.8336 13.9998C19.8336 17.2215 17.2219 19.8332 14.0002 19.8332Z" fill="white"/></svg>
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-muted-foreground leading-none mb-0.5">From</p>
+                  <p className="text-sm font-semibold text-foreground">Base</p>
+                </div>
+              </div>
+
+              {/* Arrow */}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-muted-foreground flex-shrink-0"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+
+              {/* To: selector dropdown */}
+              <div className="flex-1 relative">
+                <select
+                  value={destIndex}
+                  onChange={e => setDestIndex(Number(e.target.value))}
+                  className="w-full appearance-none px-3 py-2 rounded-lg border border-border bg-secondary text-sm font-medium text-foreground focus:outline-none focus:border-primary/60 transition-colors cursor-pointer pr-7"
                 >
-                  <span className="font-mono text-base w-5 text-center">{d.icon}</span>
-                  {d.label}
-                </button>
-              ))}
+                  {DESTINATIONS.map((d, i) => (
+                    <option key={d.label} value={i}>{d.icon} {d.label}</option>
+                  ))}
+                </select>
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-muted-foreground"><path d="M6 9l6 6 6-6"/></svg>
+                </div>
+                <p className="text-[10px] text-muted-foreground absolute -top-3.5 left-0.5">To</p>
+              </div>
             </div>
+
             <p className="text-xs text-muted-foreground">
               USDC will appear as native USDC on {dest.label} — no bridge or wrapped token.
             </p>

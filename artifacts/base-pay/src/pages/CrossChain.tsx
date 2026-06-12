@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { useAccount, useWriteContract, useSwitchChain, useReadContract } from "wagmi";
+import { useAccount, useWriteContract, useSwitchChain, useReadContract, useChainId } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { parseUnits, isAddress, decodeAbiParameters, keccak256 } from "viem";
 import { mainnet, optimism, arbitrum, polygon, base } from "viem/chains";
 import type { Chain } from "viem";
 import { WalletButton } from "@/components/Layout";
-import { config } from "@/lib/wagmi";
+import { config, formatUSDC } from "@/lib/wagmi";
 
 // ── CCTP v1 addresses ─────────────────────────────────────────────────────────
 
@@ -159,6 +159,7 @@ export default function CrossChainPage() {
   const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const { switchChainAsync }   = useSwitchChain();
+  const chainId                = useChainId();
 
   const { data: usdcBalanceRaw } = useReadContract({
     address:      USDC_BASE,
@@ -167,10 +168,6 @@ export default function CrossChainPage() {
     args:         address ? [address] : undefined,
     query:        { enabled: !!address, refetchInterval: 15_000 },
   });
-
-  const usdcBalance = usdcBalanceRaw !== undefined
-    ? Number(usdcBalanceRaw) / 1e6
-    : null;
 
   const [destIndex, setDestIndex]       = useState(0);
   const [amount, setAmount]             = useState("");
@@ -183,6 +180,7 @@ export default function CrossChainPage() {
   const [receiveTxHash, setReceiveTxHash] = useState<`0x${string}` | null>(null);
   const [error, setError]               = useState<string | null>(null);
   const [pollCount, setPollCount]       = useState(0);
+  const [attestWarning, setAttestWarning] = useState<"slow" | "very-slow" | null>(null);
 
   const dest = DESTINATIONS[destIndex];
 
@@ -190,6 +188,7 @@ export default function CrossChainPage() {
   useEffect(() => {
     if (phase !== "attesting" || !messageHash) return;
     let cancelled = false;
+    let count = 0;
     let tid: ReturnType<typeof setTimeout>;
 
     async function poll() {
@@ -206,7 +205,12 @@ export default function CrossChainPage() {
         }
       } catch { /* keep polling */ }
       if (!cancelled) {
-        setPollCount(c => c + 1);
+        count++;
+        setPollCount(count);
+        // After 2 min (24×5s) show a "taking longer than usual" note;
+        // after 10 min (120×5s) escalate to "abnormally long" warning.
+        if (count >= 120) setAttestWarning("very-slow");
+        else if (count >= 24) setAttestWarning("slow");
         tid = setTimeout(poll, 5_000);
       }
     }
@@ -221,9 +225,30 @@ export default function CrossChainPage() {
     setError(null);
 
     try {
-      const amountAtomics = parseUnits(amount, 6);
-      if (amountAtomics === 0n) throw new Error("Amount must be greater than 0");
-      if (!isAddress(recipient))  throw new Error("Invalid recipient address");
+      // Bug fix #3: wrap parseUnits — it throws a raw viem error for >6 decimal places
+      let amountAtomics: bigint;
+      try {
+        amountAtomics = parseUnits(amount, 6);
+      } catch {
+        throw new Error("Too many decimal places — USDC supports up to 6 decimal places");
+      }
+
+      // Bug fix #4: negative / zero amount
+      if (amountAtomics <= 0n) throw new Error("Amount must be greater than 0");
+      if (!isAddress(recipient)) throw new Error("Invalid recipient address");
+
+      // Bug fix #2: check balance before spending approve gas
+      if (usdcBalanceRaw !== undefined && amountAtomics > usdcBalanceRaw) {
+        throw new Error(
+          `Insufficient USDC balance — you have ${formatUSDC(usdcBalanceRaw)} USDC on Base`
+        );
+      }
+
+      // Bug fix #1: ensure we're on Base before touching Base contracts
+      if (chainId !== base.id) {
+        setPhase("approving");
+        await switchChainAsync({ chainId: base.id });
+      }
 
       // ── 1. Approve TokenMessenger to spend USDC ──
       setPhase("approving");
@@ -270,7 +295,8 @@ export default function CrossChainPage() {
       setError(msg.includes("rejected") ? "Transaction rejected" : msg.slice(0, 200));
       setPhase("error");
     }
-  }, [address, amount, recipient, dest, writeContractAsync]);
+  // Bug fix #6: switchChainAsync was missing from deps
+  }, [address, amount, recipient, dest, writeContractAsync, switchChainAsync, chainId, usdcBalanceRaw]);
 
   // ── Receive on destination chain ───────────────────────────────────────────
   const handleReceive = useCallback(async () => {
@@ -315,6 +341,7 @@ export default function CrossChainPage() {
     setReceiveTxHash(null);
     setError(null);
     setPollCount(0);
+    setAttestWarning(null);
   }
 
   if (!isConnected) {
@@ -378,6 +405,17 @@ export default function CrossChainPage() {
               {phase === "attesting" && (
                 <p className="text-xs text-muted-foreground">
                   Checking Circle attestation service… ({pollCount} check{pollCount !== 1 ? "s" : ""})
+                </p>
+              )}
+              {phase === "attesting" && attestWarning === "slow" && (
+                <p className="text-xs text-yellow-400 mt-1">
+                  Taking longer than usual — Circle attestation typically completes in 10–20 min on mainnet. Your USDC is already burned and safe.
+                </p>
+              )}
+              {phase === "attesting" && attestWarning === "very-slow" && (
+                <p className="text-xs text-orange-400 mt-1">
+                  Attestation is taking an unusually long time. You can safely close this tab — the burn is final. Return later and use the same message hash to claim.{" "}
+                  <a href="https://status.circle.com" target="_blank" rel="noopener noreferrer" className="underline">Check Circle status</a>.
                 </p>
               )}
               {phase === "ready" && (
@@ -448,15 +486,17 @@ export default function CrossChainPage() {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">
                   Balance:{" "}
-                  {usdcBalance === null
+                  {usdcBalanceRaw === undefined
                     ? <span className="inline-block w-14 h-3 rounded bg-secondary animate-pulse align-middle" />
-                    : <span className="text-foreground font-medium">{usdcBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC</span>
+                    : <span className="text-foreground font-medium">{formatUSDC(usdcBalanceRaw)} USDC</span>
                   }
                 </span>
-                {usdcBalance !== null && usdcBalance > 0 && (
+                {/* Bug fix #7: use BigInt-safe formatUSDC instead of Number() for Max.
+                    Use non-null assertion — button only renders when usdcBalanceRaw is defined. */}
+                {usdcBalanceRaw !== undefined && usdcBalanceRaw > 0n && (
                   <button
                     type="button"
-                    onClick={() => setAmount(usdcBalance.toFixed(6))}
+                    onClick={() => setAmount(formatUSDC(usdcBalanceRaw!))}
                     disabled={isActive}
                     className="text-[11px] font-semibold text-primary hover:text-primary/80 px-1.5 py-0.5 rounded border border-primary/30 hover:border-primary/60 transition-colors disabled:opacity-40"
                   >

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useAccount, useWriteContract, useSwitchChain } from "wagmi";
+import { useAccount, useWriteContract, useSwitchChain, useReadContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { parseUnits, isAddress, decodeAbiParameters, keccak256 } from "viem";
 import { mainnet, optimism, arbitrum, polygon, base } from "viem/chains";
@@ -74,6 +74,13 @@ const ERC20_ABI = [
     name: "allowance",
     type: "function" as const,
     inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view" as const,
+  },
+  {
+    name: "balanceOf",
+    type: "function" as const,
+    inputs: [{ name: "account", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view" as const,
   },
@@ -152,6 +159,18 @@ export default function CrossChainPage() {
   const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const { switchChainAsync }   = useSwitchChain();
+
+  const { data: usdcBalanceRaw } = useReadContract({
+    address:      USDC_BASE,
+    abi:          ERC20_ABI,
+    functionName: "balanceOf",
+    args:         address ? [address] : undefined,
+    query:        { enabled: !!address, refetchInterval: 15_000 },
+  });
+
+  const usdcBalance = usdcBalanceRaw !== undefined
+    ? Number(usdcBalanceRaw) / 1e6
+    : null;
 
   const [destIndex, setDestIndex]       = useState(0);
   const [amount, setAmount]             = useState("");
@@ -421,7 +440,28 @@ export default function CrossChainPage() {
 
           {/* Amount */}
           <div className="p-4 space-y-2">
-            <label className="text-sm font-medium">Amount (USDC)</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Amount (USDC)</label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  Balance:{" "}
+                  {usdcBalance === null
+                    ? <span className="inline-block w-14 h-3 rounded bg-secondary animate-pulse align-middle" />
+                    : <span className="text-foreground font-medium">{usdcBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC</span>
+                  }
+                </span>
+                {usdcBalance !== null && usdcBalance > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAmount(usdcBalance.toFixed(6))}
+                    disabled={isActive}
+                    className="text-[11px] font-semibold text-primary hover:text-primary/80 px-1.5 py-0.5 rounded border border-primary/30 hover:border-primary/60 transition-colors disabled:opacity-40"
+                  >
+                    Max
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="relative">
               <input
                 type="number"

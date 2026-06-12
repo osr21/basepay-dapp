@@ -24,6 +24,16 @@ const MAX_AMOUNT_LEN  = 20;       // e.g. "1000000.000000"
 const AMOUNT_RE       = /^\d+(\.\d{1,6})?$/; // positive decimal, up to 6 dp
 const TX_HASH_RE      = /^0x[0-9a-fA-F]{64}$/;
 
+/**
+ * Converts a validated USDC decimal string (e.g. "100.50") to atomic units
+ * (6 decimal places) without floating-point rounding errors.
+ */
+function amountToAtomicUsdc(amount: string): bigint {
+  const [intPart = "0", fracPart = ""] = amount.split(".");
+  const paddedFrac = fracPart.padEnd(6, "0").slice(0, 6);
+  return BigInt(intPart) * 1_000_000n + BigInt(paddedFrac);
+}
+
 // ── On-chain client for tx receipt verification ───────────────────────────────
 
 const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
@@ -167,28 +177,65 @@ router.patch("/payment-requests/:id", async (req, res) => {
 
   if (status === "paid") {
     if (paidTxHash) {
-      // Tx-proof path: verify on-chain that the tx succeeded and paid the recipient
+      // ── Guard: one txHash may only close one payment request ──────────────
+      // Without this check, the same tx could be submitted to mark multiple
+      // payment requests as paid simultaneously.
+      const txHashConflict = await db
+        .select({ id: paymentRequestsTable.id })
+        .from(paymentRequestsTable)
+        .where(eq(paymentRequestsTable.paidTxHash, paidTxHash))
+        .limit(1);
+      if (txHashConflict.length > 0) {
+        return res.status(400).json({ error: "Transaction hash already used for another payment request" });
+      }
+
+      // Tx-proof path: verify on-chain that the tx succeeded and paid the full
+      // requested amount to the recipient.
       try {
         const receipt = await publicClient.getTransactionReceipt({ hash: paidTxHash as Hex });
         if (receipt.status !== "success") {
           return res.status(400).json({ error: "Transaction did not succeed on-chain" });
         }
-        // Verify a USDC Transfer(to=recipientAddress) log exists in the receipt
+
+        // Scan USDC Transfer logs: find a transfer to the recipient and read the amount.
+        // Transfer(address indexed from, address indexed to, uint256 value)
+        //   topics[0] = keccak256("Transfer(address,address,uint256)")
+        //   topics[1] = from  (32-byte padded, indexed)
+        //   topics[2] = to    (32-byte padded, indexed)
+        //   data       = value (ABI-encoded uint256, NOT indexed)
+        const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
         const recipientLc = existing.recipientAddress.toLowerCase();
-        const hasTransferToRecipient = receipt.logs.some((log) => {
-          if (log.address.toLowerCase() !== USDC_ADDRESS.toLowerCase()) return false;
-          // Transfer event topic0 = keccak256("Transfer(address,address,uint256)")
-          const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-          if (log.topics[0]?.toLowerCase() !== TRANSFER_TOPIC) return false;
-          // topics[2] = "to" address, zero-padded to 32 bytes
+
+        let transferredAmount: bigint | null = null;
+        for (const log of receipt.logs) {
+          if (log.address.toLowerCase() !== USDC_ADDRESS.toLowerCase()) continue;
+          if (log.topics[0]?.toLowerCase() !== TRANSFER_TOPIC) continue;
+          // topics[2] = "to" address, zero-padded to 32 bytes → last 20 bytes
           const toRaw = log.topics[2];
-          if (!toRaw) return false;
-          const to = "0x" + toRaw.slice(-40); // last 20 bytes
-          return to.toLowerCase() === recipientLc;
-        });
-        if (!hasTransferToRecipient) {
+          if (!toRaw) continue;
+          const to = "0x" + toRaw.slice(-40);
+          if (to.toLowerCase() !== recipientLc) continue;
+          // log.data = ABI-encoded uint256 (non-indexed); parse as BigInt
+          try { transferredAmount = BigInt(log.data); } catch { continue; }
+          break; // use the first matching transfer; additional transfers also satisfy
+        }
+
+        if (transferredAmount === null) {
           req.log.warn({ paidTxHash, recipient: existing.recipientAddress }, "tx does not contain USDC Transfer to recipient");
           return res.status(400).json({ error: "Transaction does not include a USDC payment to the recipient" });
+        }
+
+        // Verify the transferred amount fully covers the requested amount.
+        // This prevents marking a 1000 USDC request as paid with a 0.000001 USDC tx.
+        const requestedAtomic = amountToAtomicUsdc(existing.amount);
+        if (transferredAmount < requestedAtomic) {
+          req.log.warn(
+            { paidTxHash, transferred: transferredAmount.toString(), requested: requestedAtomic.toString() },
+            "tx transfer amount less than requested",
+          );
+          return res.status(400).json({
+            error: `Transaction only transferred ${(Number(transferredAmount) / 1e6).toFixed(6).replace(/\.?0+$/, "")} USDC but ${existing.amount} USDC was requested`,
+          });
         }
       } catch (rpcErr) {
         req.log.error({ err: rpcErr, paidTxHash }, "on-chain tx verification failed");

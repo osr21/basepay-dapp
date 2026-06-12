@@ -47,6 +47,8 @@ overrides:
   # Security patches — pin vulnerable transitive deps to fixed versions
   qs: 6.15.2   # CVE-2026-8723 — qs.stringify DoS with comma-format null arrays
   tmp: 0.2.6   # CVE-2025-54798 / CVE-2026-44705 — path traversal via symlink (solc dep)
+  ws: 8.20.1   # GHSA-58qx-3vcg-4xpx — uninitialized memory disclosure in ws < 8.20.1
+  uuid: 11.1.1  # GHSA-w5hq-g745-h8pq — buffer bounds check in uuid v3/v5/v6 < 11.1.1
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'

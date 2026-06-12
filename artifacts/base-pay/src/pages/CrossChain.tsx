@@ -233,6 +233,7 @@ export default function CrossChainPage() {
         abi:          ERC20_ABI,
         functionName: "approve",
         args:         [TOKEN_MESSENGER_BASE, amountAtomics],
+        gas:          65_000n, // USDC approve on Base ~50k; explicit ceiling avoids estimation errors
       });
       await waitForTransactionReceipt(config, { hash: approveTx, chainId: base.id });
 
@@ -244,6 +245,7 @@ export default function CrossChainPage() {
         abi:          TOKEN_MESSENGER_ABI,
         functionName: "depositForBurn",
         args:         [amountAtomics, dest.domain, mintRecipient, USDC_BASE],
+        gas:          300_000n, // CCTP depositForBurn on Base ~200k; ceiling prevents "exceeds max gas limit" on smart wallets
       });
       setBurnTxHash(burnTx);
 
@@ -290,6 +292,7 @@ export default function CrossChainPage() {
         functionName: "receiveMessage",
         args:         [messageBytes, attestation as `0x${string}`],
         chain:        dest.chain,
+        gas:          400_000n, // CCTP receiveMessage ~250-300k; ceiling prevents estimation errors on destination chains
       });
       setReceiveTxHash(receiveTx);
 

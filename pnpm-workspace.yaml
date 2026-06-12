@@ -44,6 +44,9 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  # Security patches — pin vulnerable transitive deps to fixed versions
+  qs: 6.15.2   # CVE-2026-8723 — qs.stringify DoS with comma-format null arrays
+  tmp: 0.2.6   # CVE-2025-54798 / CVE-2026-44705 — path traversal via symlink (solc dep)
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-arm64': '-'
   '@expo/ngrok-bin>@expo/ngrok-bin-darwin-x64': '-'

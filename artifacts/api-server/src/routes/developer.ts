@@ -8,11 +8,15 @@ import { eq, and, isNull } from "drizzle-orm";
 
 const router = Router();
 
-// ── JWT secret (derived from SESSION_SECRET) ──────────────────────────────────
+// ── JWT secret ────────────────────────────────────────────────────────────────
+// Use the raw SESSION_SECRET bytes. Do NOT pad or truncate — both operations
+// silently reduce effective entropy (padding with zeros gives false security;
+// truncation discards entropy from long secrets).
 function getJwtSecret(): Uint8Array {
   const s = process.env.SESSION_SECRET;
   if (!s) throw new Error("SESSION_SECRET not set");
-  return new TextEncoder().encode(s.padEnd(32, "0").slice(0, 64));
+  if (s.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters for HS256 signing");
+  return new TextEncoder().encode(s);
 }
 
 async function signDevJwt(address: string): Promise<string> {
@@ -25,12 +29,41 @@ async function signDevJwt(address: string): Promise<string> {
 
 export async function verifyDevJwt(token: string): Promise<string | null> {
   try {
-    const { payload } = await jwtVerify(token, getJwtSecret());
+    // Explicitly enforce HS256 to prevent algorithm-confusion attacks
+    // (e.g., a crafted token with alg:none or alg:RS256).
+    const { payload } = await jwtVerify(token, getJwtSecret(), { algorithms: ["HS256"] });
     return typeof payload.address === "string" ? payload.address : null;
   } catch {
     return null;
   }
 }
+
+// ── In-memory rate limiter for /developer/auth ─────────────────────────────
+// Limits expensive verifyMessage calls to 20 attempts per IP per hour.
+// Uses a simple Map; acceptable for a single-process server.
+const _authAttempts = new Map<string, { count: number; resetAt: number }>();
+const AUTH_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const AUTH_LIMIT     = 20;
+
+function checkAuthRateLimit(ip: string): boolean {
+  const now   = Date.now();
+  const entry = _authAttempts.get(ip);
+  if (!entry || entry.resetAt < now) {
+    _authAttempts.set(ip, { count: 1, resetAt: now + AUTH_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= AUTH_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
+// Prune stale entries every hour so the Map doesn't grow unbounded.
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of _authAttempts) {
+    if (entry.resetAt < now) _authAttempts.delete(ip);
+  }
+}, AUTH_WINDOW_MS).unref();
 
 // ── Auth middleware ────────────────────────────────────────────────────────────
 interface DevRequest extends Request { developerAddress: string; }
@@ -61,6 +94,12 @@ const CreateKeySchema = z.object({
 // Verifies an EIP-191 wallet signature and returns a 24h JWT session token.
 // The frontend constructs the message so the user can read it in their wallet.
 router.post("/developer/auth", async (req, res) => {
+  const ip = (req.ip ?? req.socket?.remoteAddress ?? "unknown");
+  if (!checkAuthRateLimit(ip)) {
+    req.log.warn({ ip }, "developer auth rate limit exceeded");
+    return res.status(429).json({ error: "Too many authentication attempts — try again in an hour" });
+  }
+
   const parsed = AuthSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });

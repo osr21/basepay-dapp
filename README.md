@@ -13,6 +13,7 @@
   | **Send** | USDC transfer via approve→transfer or EIP-2612 permit (one tx) |
   | **Gasless Transfer** | User signs off-chain (EIP-3009); relayer pays the ETH gas — user pays zero |
   | **Gasless Swap** | Swap USDC ↔ EURC via Aerodrome Finance — one signature, zero ETH, delivered to your wallet |
+    | **Cross-Chain Transfer** | Bridge USDC from Base to Ethereum, Optimism, Arbitrum, or Polygon via Circle CCTP v1 — arrives as native USDC, no wrapped tokens |
   | **Batch Pay** | Up to 200 recipients in a single transaction |
   | **Escrow** | Time-locked USDC with release / refund |
   | **Subscriptions** | On-chain recurring charges at fixed intervals |
@@ -207,6 +208,88 @@
   | EURC → USDC | 2 EURC → 2.2989 USDC | [`0x7b4c9bcc`](https://basescan.org/tx/0x7b4c9bcc2c8443c7c69b9fc21a96847bcbdf161283a5a5aa8c60fc8161c807cb) |
   | USDC → EURC | 2 USDC → 1.7300 EURC | [`0xc19b0154`](https://basescan.org/tx/0xc19b01544385ac3e933ae4506f2a420e4f714f63636636b8f5830f995f1b43fc) |
 
+    ---
+
+    ## Cross-Chain Transfer (CCTP)
+
+    Send USDC from Base to **Ethereum, Optimism, Arbitrum, or Polygon** using [Circle's Cross-Chain Transfer Protocol v1](https://developers.circle.com/stablecoins/cctp-getting-started). Arrives as **native USDC** on the destination chain — no wrapped tokens, no bridge liquidity risk, no third-party custody.
+
+    ### How it works
+
+    ```
+    User (Base)              Base Mainnet           Circle Attestation      Destination Chain
+     │                            │                        │                       │
+     │─ 1. approve ──────────────▶│ USDC.approve           │                       │
+     │   (TokenMessenger, amt)    │ gas: ~50k (cap 65k)    │                       │
+     │                            │                        │                       │
+     │─ 2. depositForBurn ───────▶│ TokenMessenger         │                       │
+     │   (amt, destDomain,        │ .depositForBurn        │                       │
+     │    mintRecipient)          │ gas: ~240k (cap 300k)  │                       │
+     │                            │                        │                       │
+     │◀─ burnTxHash ──────────────│                        │                       │
+     │                            │                        │                       │
+     │    ── wait 10–20 min (mainnet attestation) ──       │                       │
+     │                            │                        │                       │
+     │─ 3. poll ─────────────────────────────────────────▶│                       │
+     │   GET /api/cctp/attestation/{messageHash}           │                       │
+     │◀─ { status: "complete", attestation: "0x..." } ────│                       │
+     │                            │                        │                       │
+     │─ 4. receiveMessage ────────────────────────────────────────────────────────▶│
+     │   (wallet switched to dest chain)                   │  MessageTransmitter   │
+     │                            │                        │  gas: ~350k (cap 400k)│
+     │◀─ USDC minted on dest ─────────────────────────────────────────────────────│
+    ```
+
+    1. **Approve** — user approves `TokenMessenger` to spend USDC on Base (ERC-20 standard approve).
+    2. **depositForBurn** — `TokenMessenger.depositForBurn(amount, destinationDomain, mintRecipient, usdcAddress)` burns USDC on Base and emits a cross-chain message event.
+    3. **Attestation** — Circle's attestation service signs the burn message. BasePay proxies polling at `/api/cctp/attestation/:messageHash` (regex-validated, 12 s timeout) to avoid CORS. On mainnet, attestation takes **10–20 minutes**.
+    4. **receiveMessage** — user switches to the destination chain; `MessageTransmitter.receiveMessage(message, attestation)` mints the equivalent USDC to the recipient address.
+
+    ### CCTP v1 Contract Addresses
+
+    **Source (Base Mainnet — burns USDC):**
+
+    | Contract | Address |
+    |---|---|
+    | USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+    | TokenMessenger | `0x1682Ae6375C4E4A97e4B583BC394c861A46D8962` |
+    | MessageTransmitter | `0xAD09780d193884d503182aD4588450C416D6F9D4` |
+
+    **Destinations:**
+
+    | Chain | CCTP Domain | MessageTransmitter |
+    |---|---|---|
+    | Ethereum Mainnet | `0` | `0x0a992d191DEeC32aFe36203Ad87D7d289a738F81` |
+    | Optimism | `2` | `0x4D41f22c5a0e5c74090899E5a8Fb597a8842b3e8` |
+    | Arbitrum One | `3` | `0xC30362313FBBA5cf9163F0bb16a0e01f01A896ca` |
+    | Polygon PoS | `7` | `0xF3be9355363857F3e001be68856A2f96b4C39Ba9` |
+
+    ### Gas Limits
+
+    `eth_estimateGas` reverts for CCTP calls on Base Mainnet. Explicit ceilings bypass estimation:
+
+    | Call | Observed gas | Hard cap |
+    |---|---|---|
+    | `USDC.approve(TokenMessenger, amount)` | ~50,000 | `65_000n` |
+    | `TokenMessenger.depositForBurn(...)` | ~240,000 | `300_000n` |
+    | `MessageTransmitter.receiveMessage(...)` | ~350,000 | `400_000n` |
+
+    Unused gas is refunded on Base — setting a higher ceiling does not cost the user more.
+
+    ### Attestation Timing
+
+    | Network | Typical time |
+    |---|---|
+    | Base Sepolia (testnet) | < 30 seconds |
+    | Base Mainnet | **10–20 minutes** |
+
+    The UI polls every 5 seconds and surfaces escalating warnings: a yellow notice at 2 minutes and an orange alert at 10 minutes with a link to [status.circle.com](https://status.circle.com). The burn is **final and irreversible** once `depositForBurn` confirms — attestation arrives even if the tab is closed; return later and the receive step will still work.
+
+    ### Wallet Compatibility
+
+    CCTP uses standard contract calls — fully compatible with Coinbase Smart Wallet, MetaMask, and all EOA wallets. (Unlike EIP-3009 gasless transfers, CCTP does not rely on `ecrecover`.)
+
+  
   ---
 
   ## Coinbase Smart Wallet & EAS Identity
@@ -430,6 +513,7 @@
   | EIP-3009 requires EOA | Smart contract wallets (Coinbase Smart Wallet, Safe) cannot sign EIP-3009 messages usable by USDC's `ecrecover`. The dApp detects and warns. |
   | x402 public facilitator is testnet-only | `https://x402.org/facilitator` supports Base Sepolia only. A CDP or self-hosted facilitator is required for Base Mainnet payment gating. |
   | Relayer ETH balance | The gasless relayer must hold ETH on Base. The dApp shows a warning when the balance drops below 0.001 ETH. |
+    | CCTP attestation latency | Circle attestation on Base Mainnet takes 10–20 minutes. The burn is irreversible once confirmed; warn users before they sign. |
   | Swap server clock drift | Production server clocks can drift behind Base's block.timestamp. The swap deadline is set 2 hours out to compensate. |
 
   ---

@@ -3,3 +3,5 @@
 - [OnchainKit wagmi/experimental shim](onchainkit-wagmi-shim.md) — OnchainKit 1.x imports wagmi/experimental which was removed in wagmi v3; requires a Vite alias shim
 - [x402 relay route pattern](x402-relay-pattern.md) — x402 middleware must be lazy-initialized; FEE_COLLECTOR_ADDRESS drives payTo; use @x402/evm/exact/server + @x402/core/server
 - [Aerodrome Swap Architecture](aerodrome-swap.md) — Uni V3 has zero USDC/EURC liquidity on Base; use Aerodrome; relayer is EIP-7702 (avoid startup approvals)
+- [CCTP Cross-Chain Transfer](cctp-architecture.md) — Circle CCTP v1: burn USDC on Base TokenMessenger → poll Circle attestation → receiveMessage on destination; wagmi chain IDs need explicit cast when passing to wagmi/actions
+- [Developer API Key Auth](developer-api-keys.md) — EIP-191 wallet signature → HS256 JWT (SESSION_SECRET); SHA-256 hashed bpk_ keys; requireAuth middleware needs explicit return next() and req.params casts for Express 5 compat

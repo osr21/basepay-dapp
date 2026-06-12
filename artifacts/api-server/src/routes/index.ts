@@ -7,6 +7,8 @@ import appRouter from "./app";
 import gaslessRouter from "./gasless";
 import swapRouter from "./swap";
 import x402relayRouter from "./x402relay";
+import developerRouter from "./developer";
+import cctpRouter from "./cctp";
 
 const router: IRouter = Router();
 
@@ -18,5 +20,7 @@ router.use(appRouter);
 router.use(gaslessRouter);
 router.use(swapRouter);
 router.use(x402relayRouter);
+router.use(developerRouter);
+router.use(cctpRouter);
 
 export default router;

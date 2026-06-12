@@ -1,5 +1,5 @@
 import { createConfig, http, createConnector } from "wagmi";
-import { base } from "viem/chains";
+import { base, mainnet, optimism, arbitrum, polygon } from "viem/chains";
 import { coinbaseWallet, injected, walletConnect } from "wagmi/connectors";
 import { concat, fallback, type Hex } from "viem";
 import { Attribution } from "ox/erc8021";
@@ -91,7 +91,7 @@ const wcConnector = _wcProjectId
   : null;
 
 export const config = createConfig({
-  chains: [base],
+  chains: [base, mainnet, optimism, arbitrum, polygon],
   connectors: [
     cbWallet,
     attributedInjected(),
@@ -103,6 +103,10 @@ export const config = createConfig({
       http("https://base.llamarpc.com"),
       http("https://base-rpc.publicnode.com"),
     ]),
+    [mainnet.id]:  http("https://eth.llamarpc.com"),
+    [optimism.id]: http("https://mainnet.optimism.io"),
+    [arbitrum.id]: http("https://arb1.arbitrum.io/rpc"),
+    [polygon.id]:  http("https://polygon-rpc.com"),
   },
 });
 

@@ -11,6 +11,7 @@ const NAV = [
   { path: "/send",         label: "Send",        icon: SendIcon         },
   { path: "/gasless",      label: "Gasless",     icon: GaslessIcon, badge: "0 gas" },
   { path: "/swap",         label: "Swap",        icon: SwapNavIcon      },
+  { path: "/cross-chain",  label: "Cross-Chain", icon: CrossChainIcon   },
   { path: "/batch-pay",    label: "Batch Pay",   icon: BatchIcon        },
   { path: "/request",      label: "Request",     icon: RequestIcon      },
   { path: "/requests",     label: "My Requests", icon: ListIcon         },
@@ -18,6 +19,7 @@ const NAV = [
   { path: "/subscriptions",label: "Subscribe",   icon: RepeatIcon       },
   { path: "/contacts",     label: "Contacts",    icon: ContactsIcon     },
   { path: "/app-info",     label: "dApp Info",   icon: ShieldIcon       },
+  { path: "/developer",    label: "Developer",   icon: KeyNavIcon       },
 ];
 
 function HomeIcon() {
@@ -54,12 +56,20 @@ function RepeatIcon() {
 function SwapNavIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 16V4m0 0L3 8m4-4 4 4"/><path d="M17 8v12m0 0 4-4m-4 4-4-4"/></svg>;
 }
+function CrossChainIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>;
+}
+function KeyNavIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>;
+}
 function WrongNetworkBanner() {
+  const [location]     = useLocation();
   const { isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChain, isPending } = useSwitchChain();
 
-  if (!isConnected || chainId === base.id) return null;
+  // On the cross-chain page, switching away from Base is intentional
+  if (!isConnected || chainId === base.id || location === "/cross-chain") return null;
 
   return (
     <div className="flex items-center justify-between gap-3 px-4 md:px-8 py-2.5 bg-red-500/10 border-b border-red-500/20 text-sm">

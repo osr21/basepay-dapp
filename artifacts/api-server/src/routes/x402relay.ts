@@ -13,10 +13,10 @@ import {
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseTransport, basePublicClient as publicClient } from "../lib/rpc";
-import { createPrivateKey } from "crypto";
+import { createPrivateKey, createHash } from "crypto";
 import { SignJWT } from "jose";
-import { db, gaslessNoncesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, gaslessNoncesTable, developerKeysTable } from "@workspace/db";
+import { eq, and, isNull } from "drizzle-orm";
 import { z } from "zod";
 
 const router = Router();
@@ -236,6 +236,38 @@ const X402RelaySchema = z.object({
 
 const pendingNonces = new Set<string>();
 
+// ── API Key bypass ─────────────────────────────────────────────────────────────
+// If a valid developer API key is present in X-API-Key, skip the x402 payment
+// gate and track the request count against the key. Keys are issued via the
+// developer portal at /developer.
+async function checkApiKey(
+  req: Parameters<typeof x402Gate>[0] & { __apiKeyAuth?: boolean },
+  _res: Parameters<typeof x402Gate>[1],
+  next: Parameters<typeof x402Gate>[2],
+) {
+  const apiKey = req.headers["x-api-key"];
+  if (typeof apiKey === "string" && apiKey.startsWith("bpk_")) {
+    try {
+      const keyHash = createHash("sha256").update(apiKey).digest("hex");
+      const [row] = await db
+        .select()
+        .from(developerKeysTable)
+        .where(and(eq(developerKeysTable.keyHash, keyHash), isNull(developerKeysTable.revokedAt)))
+        .limit(1);
+      if (row) {
+        db.update(developerKeysTable)
+          .set({ requestCount: row.requestCount + 1, lastUsedAt: new Date() })
+          .where(eq(developerKeysTable.id, row.id))
+          .catch(() => {});
+        req.__apiKeyAuth = true;
+      }
+    } catch {
+      // Invalid key format or DB error — fall through to x402
+    }
+  }
+  next();
+}
+
 // ── GET /api/v2/relay/info ─────────────────────────────────────────────────────
 router.get("/v2/relay/info", (_req, res) => {
   const useCdp = hasCdpCredentials();
@@ -255,7 +287,13 @@ router.get("/v2/relay/info", (_req, res) => {
 // ── POST /api/v2/relay — x402-gated relay endpoint ────────────────────────────
 router.post(
   "/v2/relay",
+  checkApiKey as Parameters<typeof router.post>[1],
   (req, res, next) => {
+    const r = req as typeof req & { __apiKeyAuth?: boolean };
+    if (r.__apiKeyAuth) {
+      req.log.info("x402 relay: developer API key auth bypass");
+      return next();
+    }
     if (!PAY_TO) {
       req.log.warn("x402 relay: FEE_COLLECTOR_ADDRESS not set — skipping payment gate");
       return next();

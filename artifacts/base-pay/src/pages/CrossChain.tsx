@@ -219,6 +219,7 @@ export default function CrossChainPage() {
   const [resumeTxHash,   setResumeTxHash]   = useState("");
   const [resumeSrcIndex, setResumeSrcIndex] = useState(0);
   const [isResuming,     setIsResuming]     = useState(false);
+  const [isRelaying,     setIsRelaying]     = useState(false);
 
   const isActive = phase !== "idle" && phase !== "done" && phase !== "error";
 
@@ -437,6 +438,47 @@ export default function CrossChainPage() {
       setIsResuming(false);
     }
   }, [resumeTxHash, resumeSrcIndex]);
+
+  // ── Gasless receive — relayer submits receiveMessage on the destination chain ─
+  // The user pays no gas and doesn't need to switch chains.
+  const handleGaslessReceive = useCallback(async () => {
+    if (!attestation || !messageBytes) return;
+    setError(null);
+    setIsRelaying(true);
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/cctp/relay-receive`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ messageBytes, attestation, destDomain: dest.domain }),
+      });
+      const data = await res.json() as { txHash?: string; error?: string; selfRelay?: boolean };
+
+      if (res.status === 409) {
+        // Already received — treat as success
+        setPhase("done");
+        return;
+      }
+      if (!res.ok || !data.txHash) {
+        throw new Error(data.error ?? "Relay failed");
+      }
+
+      setReceiveTxHash(data.txHash as `0x${string}`);
+      setReceiveExplorer(dest.explorer);
+      setPhase("receiving");
+
+      await waitForTransactionReceipt(config, {
+        hash:    data.txHash as `0x${string}`,
+        chainId: dest.chain.id as CfgChainId,
+      });
+      setPhase("done");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      setError(msg.slice(0, 200));
+      setPhase("ready"); // stay on ready so user can fall back to self-relay
+    } finally {
+      setIsRelaying(false);
+    }
+  }, [attestation, messageBytes, dest]);
 
   function reset() {
     setPhase("idle");
@@ -742,12 +784,27 @@ export default function CrossChainPage() {
         )}
 
         {phase === "ready" && (
-          <button
-            onClick={handleReceive}
-            className="flex-1 py-3 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-500 transition-all shadow-[0_0_20px_rgba(34,197,94,0.25)]"
-          >
-            Switch to {dest.label} &amp; Receive →
-          </button>
+          <div className="flex-1 flex flex-col gap-2">
+            {/* Primary: gasless — relayer pays gas, no chain switch needed */}
+            <button
+              onClick={handleGaslessReceive}
+              disabled={isRelaying}
+              className="w-full py-3 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-500 transition-all shadow-[0_0_20px_rgba(34,197,94,0.25)] disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {isRelaying
+                ? <><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Relaying…</>
+                : <>⚡ Gasless Receive — relayer pays gas</>
+              }
+            </button>
+            {/* Fallback: self-relay (user switches chain and pays gas) */}
+            <button
+              onClick={handleReceive}
+              disabled={isRelaying}
+              className="w-full py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all disabled:opacity-40"
+            >
+              Self-relay — switch to {dest.label} &amp; pay gas
+            </button>
+          </div>
         )}
 
         {phase === "done" && (

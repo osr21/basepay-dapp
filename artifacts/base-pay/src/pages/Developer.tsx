@@ -14,12 +14,6 @@ interface DeveloperKey {
   revoked: boolean;
 }
 
-interface StoredAuth {
-  token: string;
-  address: string;
-  expiresAt: number;
-}
-
 function api(path: string) {
   return `${import.meta.env.BASE_URL}api/${path}`;
 }
@@ -65,7 +59,9 @@ export default function DeveloperPage() {
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
-  const [auth, setAuth] = useState<StoredAuth | null>(null);
+  // sessionAddress: the wallet address the current HttpOnly cookie is bound to.
+  // null = no active session (not authenticated, or session expired).
+  const [sessionAddress, setSessionAddress] = useState<string | null>(null);
   const [keys, setKeys] = useState<DeveloperKey[]>([]);
   const [keysLoading, setKeysLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
@@ -75,36 +71,58 @@ export default function DeveloperPage() {
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Restore saved JWT if still valid and for the right wallet
+  // isAuthenticated is true only when the session cookie belongs to the
+  // currently connected wallet.  If the user switches wallets, they need to
+  // re-authenticate even if a valid cookie for another address still exists.
+  const isAuthenticated =
+    sessionAddress !== null &&
+    address !== undefined &&
+    sessionAddress === address.toLowerCase();
+
+  // ── Check existing session on mount / wallet change ───────────────────────
+  // GET /developer/session reads the HttpOnly cookie server-side and returns
+  // the bound address.  The JWT itself never touches the browser's JS heap.
   useEffect(() => {
-    if (!address) return;
-    const raw = localStorage.getItem("basepay_dev_auth");
-    if (!raw) return;
-    try {
-      const stored: StoredAuth = JSON.parse(raw);
-      if (stored.address === address.toLowerCase() && stored.expiresAt > Date.now()) {
-        setAuth(stored);
-      }
-    } catch { /* ignore */ }
+    let cancelled = false;
+    if (!address) { setSessionAddress(null); return; }
+
+    fetch(api("developer/session"))
+      .then(r => r.json())
+      .then((data: { authenticated: boolean; address: string | null }) => {
+        if (cancelled) return;
+        if (data.authenticated && data.address === address.toLowerCase()) {
+          setSessionAddress(data.address);
+        } else {
+          setSessionAddress(null);
+        }
+      })
+      .catch(() => { if (!cancelled) setSessionAddress(null); });
+
+    return () => { cancelled = true; };
   }, [address]);
 
-  const loadKeys = useCallback(async (token: string) => {
+  // ── Load keys whenever the session becomes valid ──────────────────────────
+  const loadKeys = useCallback(async () => {
     setKeysLoading(true);
     try {
-      const res = await fetch(api("developer/keys"), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // No Authorization header — the browser sends the HttpOnly cookie automatically
+      const res = await fetch(api("developer/keys"));
       const data = await res.json();
-      if (res.ok) setKeys(data);
+      if (res.ok) {
+        setKeys(data);
+      } else if (res.status === 401) {
+        setSessionAddress(null); // cookie expired server-side
+      }
     } finally {
       setKeysLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (auth) loadKeys(auth.token);
-  }, [auth, loadKeys]);
+    if (isAuthenticated) loadKeys();
+  }, [isAuthenticated, loadKeys]);
 
+  // ── Sign-in ───────────────────────────────────────────────────────────────
   async function authenticate() {
     if (!address) return;
     setAuthLoading(true);
@@ -120,13 +138,8 @@ export default function DeveloperPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Authentication failed");
-      const stored: StoredAuth = {
-        token:     data.token,
-        address:   address.toLowerCase(),
-        expiresAt: Date.now() + data.expiresIn * 1000,
-      };
-      localStorage.setItem("basepay_dev_auth", JSON.stringify(stored));
-      setAuth(stored);
+      // Server sets the HttpOnly cookie; we just record the bound address in state
+      setSessionAddress(data.address as string);
     } catch (e: unknown) {
       if (e instanceof Error && e.message.includes("rejected")) {
         setError("Signature rejected — please sign to continue");
@@ -138,20 +151,23 @@ export default function DeveloperPage() {
     }
   }
 
-  function signOut() {
-    localStorage.removeItem("basepay_dev_auth");
-    setAuth(null);
+  // ── Sign-out ──────────────────────────────────────────────────────────────
+  async function signOut() {
+    try {
+      await fetch(api("developer/logout"), { method: "POST" });
+    } catch { /* best-effort */ }
+    setSessionAddress(null);
     setKeys([]);
   }
 
   async function createKey() {
-    if (!auth || !newKeyName.trim()) return;
+    if (!isAuthenticated || !newKeyName.trim()) return;
     setCreateLoading(true);
     setError(null);
     try {
       const res = await fetch(api("developer/keys"), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth.token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newKeyName.trim() }),
       });
       const data = await res.json();
@@ -159,7 +175,7 @@ export default function DeveloperPage() {
       setRevealedKey(data.key);
       setNewKeyName("");
       setShowCreate(false);
-      await loadKeys(auth.token);
+      await loadKeys();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to create key");
     } finally {
@@ -168,14 +184,12 @@ export default function DeveloperPage() {
   }
 
   async function revokeKey(id: number) {
-    if (!auth) return;
+    if (!isAuthenticated) return;
     if (!window.confirm("Revoke this API key? Requests using it will immediately fail.")) return;
-    const res = await fetch(api(`developer/keys/${id}`), {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${auth.token}` },
-    });
-    if (res.ok) await loadKeys(auth.token);
-    else {
+    const res = await fetch(api(`developer/keys/${id}`), { method: "DELETE" });
+    if (res.ok) {
+      await loadKeys();
+    } else {
       const data = await res.json().catch(() => ({}));
       setError((data as { error?: string }).error ?? "Revoke failed");
     }
@@ -193,7 +207,7 @@ export default function DeveloperPage() {
     );
   }
 
-  if (!auth) {
+  if (!isAuthenticated) {
     return (
       <div className="max-w-md mx-auto py-10 space-y-6">
         <div className="text-center">

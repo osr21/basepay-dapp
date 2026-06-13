@@ -5,4 +5,4 @@
 - [Aerodrome Swap Architecture](aerodrome-swap.md) — Uni V3 has zero USDC/EURC liquidity on Base; use Aerodrome; relayer is EIP-7702 (avoid startup approvals)
 - [CCTP Cross-Chain Transfer](cctp-architecture.md) — Circle CCTP v1: burn USDC on Base TokenMessenger → poll Circle attestation → receiveMessage on destination; wagmi chain IDs need explicit cast when passing to wagmi/actions
 - [Developer API Key Auth](developer-api-keys.md) — EIP-191 wallet signature → HS256 JWT (SESSION_SECRET); SHA-256 hashed bpk_ keys; requireAuth middleware needs explicit return next() and req.params casts for Express 5 compat
-- [Security Audit Results](security-audit.md) — dep overrides (qs 6.15.2, tmp 0.2.6, ws 8.20.1, uuid 11.1.1) in pnpm-workspace.yaml; payment request tx-proof must verify amount AND txHash uniqueness; HoundDog "encryption key" criticals are false positives (address not private key)
+- [Security Audit Results](security-audit.md) — dep overrides in pnpm-workspace.yaml; esbuild CVE fixed to 0.28.1; JWT moved from localStorage to HttpOnly cookie; HoundDog "encryption key" criticals are false positives (address not private key)

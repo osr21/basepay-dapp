@@ -9,9 +9,6 @@ import { eq, and, isNull } from "drizzle-orm";
 const router = Router();
 
 // ── JWT secret ────────────────────────────────────────────────────────────────
-// Use the raw SESSION_SECRET bytes. Do NOT pad or truncate — both operations
-// silently reduce effective entropy (padding with zeros gives false security;
-// truncation discards entropy from long secrets).
 function getJwtSecret(): Uint8Array {
   const s = process.env.SESSION_SECRET;
   if (!s) throw new Error("SESSION_SECRET not set");
@@ -38,9 +35,43 @@ export async function verifyDevJwt(token: string): Promise<string | null> {
   }
 }
 
+// ── Session cookie ────────────────────────────────────────────────────────────
+// The JWT is stored server-side in an HttpOnly cookie — JS on the page can
+// never read it, which eliminates the XSS token-theft vector that exists when
+// tokens are stored in localStorage.
+const COOKIE_NAME             = "dev_session";
+const SESSION_MAX_AGE_SECONDS = 86_400; // 24 h
+
+/** Parse a single named value from a raw Cookie request-header string. */
+function readCookie(cookieHeader: string | undefined, name: string): string | undefined {
+  if (!cookieHeader) return undefined;
+  for (const part of cookieHeader.split(";")) {
+    const sep = part.indexOf("=");
+    if (sep === -1) continue;
+    const k = part.slice(0, sep).trim();
+    if (k === name) return decodeURIComponent(part.slice(sep + 1).trim());
+  }
+  return undefined;
+}
+
+/** Set the HttpOnly session cookie after successful authentication. */
+function setSessionCookie(res: Response, token: string): void {
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true,   // not readable by document.cookie / JS
+    secure:   true,   // HTTPS-only — Replit always proxies over HTTPS
+    sameSite: "strict",
+    maxAge:   SESSION_MAX_AGE_SECONDS * 1_000, // express uses ms
+    path:     "/api/developer",  // scoped — only sent for /api/developer/* requests
+  });
+}
+
+/** Expire the session cookie on logout. */
+function clearSessionCookie(res: Response): void {
+  res.clearCookie(COOKIE_NAME, { path: "/api/developer" });
+}
+
 // ── In-memory rate limiter for /developer/auth ─────────────────────────────
 // Limits expensive verifyMessage calls to 20 attempts per IP per hour.
-// Uses a simple Map; acceptable for a single-process server.
 const _authAttempts = new Map<string, { count: number; resetAt: number }>();
 const AUTH_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const AUTH_LIMIT     = 20;
@@ -69,12 +100,12 @@ setInterval(() => {
 interface DevRequest extends Request { developerAddress: string; }
 
 async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Missing or invalid Authorization header" });
+  const token = readCookie(req.headers.cookie, COOKIE_NAME);
+  if (!token) {
+    return res.status(401).json({ error: "Not authenticated — sign with your wallet to continue" });
   }
-  const address = await verifyDevJwt(auth.slice(7));
-  if (!address) return res.status(401).json({ error: "Invalid or expired session — sign again" });
+  const address = await verifyDevJwt(token);
+  if (!address) return res.status(401).json({ error: "Session expired — sign again" });
   (req as DevRequest).developerAddress = address;
   return next();
 }
@@ -91,8 +122,7 @@ const CreateKeySchema = z.object({
 });
 
 // ── POST /api/developer/auth ──────────────────────────────────────────────────
-// Verifies an EIP-191 wallet signature and returns a 24h JWT session token.
-// The frontend constructs the message so the user can read it in their wallet.
+// Verifies an EIP-191 wallet signature and sets a 24h HttpOnly session cookie.
 router.post("/developer/auth", async (req, res) => {
   const ip = (req.ip ?? req.socket?.remoteAddress ?? "unknown");
   if (!checkAuthRateLimit(ip)) {
@@ -121,8 +151,28 @@ router.post("/developer/auth", async (req, res) => {
   if (!valid) return res.status(401).json({ error: "Signature verification failed" });
 
   const token = await signDevJwt(address.toLowerCase());
+  setSessionCookie(res, token);
   req.log.info({ address }, "developer session issued");
-  return res.json({ token, expiresIn: 86400 });
+  // Return the address (not the token — it lives in the HttpOnly cookie now)
+  return res.json({ address: address.toLowerCase(), expiresIn: SESSION_MAX_AGE_SECONDS });
+});
+
+// ── GET /api/developer/session ─────────────────────────────────────────────────
+// Returns the wallet address bound to the current session, or null.
+// Used by the frontend to restore auth state on page load without re-signing.
+router.get("/developer/session", async (req, res) => {
+  const token = readCookie(req.headers.cookie, COOKIE_NAME);
+  if (!token) return res.json({ authenticated: false, address: null });
+  const address = await verifyDevJwt(token);
+  return res.json({ authenticated: !!address, address: address ?? null });
+});
+
+// ── POST /api/developer/logout ─────────────────────────────────────────────────
+// Clears the session cookie, ending the authenticated session immediately.
+router.post("/developer/logout", (req, res) => {
+  clearSessionCookie(res);
+  req.log.info("developer session cleared");
+  return res.json({ success: true });
 });
 
 // ── GET /api/developer/keys ────────────────────────────────────────────────────
@@ -163,8 +213,8 @@ router.post("/developer/keys", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Maximum 10 active API keys — revoke one first" });
   }
 
-  const rawKey   = `bpk_${randomBytes(32).toString("hex")}`;
-  const keyHash  = createHash("sha256").update(rawKey).digest("hex");
+  const rawKey    = `bpk_${randomBytes(32).toString("hex")}`;
+  const keyHash   = createHash("sha256").update(rawKey).digest("hex");
   const keyPrefix = rawKey.slice(0, 12);
 
   const [row] = await db

@@ -67,6 +67,7 @@ app.use("/api/contacts", writeLimiter);
 app.use("/api/payment-requests", writeLimiter);
 app.use("/api/gasless", writeLimiter);
 app.use("/api/swap/execute", writeLimiter);
+app.use("/api/cctp/relay-receive", writeLimiter);
 
 app.use(
   pinoHttp({

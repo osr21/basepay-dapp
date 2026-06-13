@@ -61,9 +61,15 @@ export function getRelayerAccount(): ReturnType<typeof privateKeyToAccount> {
   return _relayerAccount;
 }
 
-/** Creates a walletClient for the relayer account on any supported chain. */
-export function getChainWalletClient(chain: Chain) {
+const _walletClients = new Map<number, ReturnType<typeof createWalletClient>>();
+
+/** Returns a cached walletClient for the relayer account on any supported chain. */
+export function getChainWalletClient(chain: Chain): ReturnType<typeof createWalletClient> {
+  const cached = _walletClients.get(chain.id);
+  if (cached) return cached;
   const account = getRelayerAccount();
   const url = CHAIN_RPC_URLS[chain.id];
-  return createWalletClient({ account, chain, transport: url ? http(url) : http() });
+  const client = createWalletClient({ account, chain, transport: url ? http(url) : http() });
+  _walletClients.set(chain.id, client);
+  return client;
 }

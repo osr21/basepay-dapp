@@ -215,11 +215,13 @@ export default function CrossChainPage() {
   const [receiveExplorer, setReceiveExplorer] = useState("");
 
   // ── Resume flow state ──────────────────────────────────────────────────────
-  const [showResume,     setShowResume]     = useState(false);
-  const [resumeTxHash,   setResumeTxHash]   = useState("");
-  const [resumeSrcIndex, setResumeSrcIndex] = useState(0);
-  const [isResuming,     setIsResuming]     = useState(false);
-  const [isRelaying,     setIsRelaying]     = useState(false);
+  const [showResume,       setShowResume]       = useState(false);
+  const [resumeTxHash,     setResumeTxHash]     = useState("");
+  const [resumeSrcIndex,   setResumeSrcIndex]   = useState(0);
+  const [isResuming,       setIsResuming]       = useState(false);
+  const [isRelaying,       setIsRelaying]       = useState(false);
+  // Set to true when the gasless relayer is underfunded — nudges user to self-relay
+  const [selfRelayNeeded,  setSelfRelayNeeded]  = useState(false);
 
   const isActive = phase !== "idle" && phase !== "done" && phase !== "error";
 
@@ -444,19 +446,26 @@ export default function CrossChainPage() {
   const handleGaslessReceive = useCallback(async () => {
     if (!attestation || !messageBytes) return;
     setError(null);
+    setSelfRelayNeeded(false);
     setIsRelaying(true);
     try {
       const res = await fetch(`${import.meta.env.BASE_URL}api/cctp/relay-receive`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ messageBytes, attestation, destDomain: dest.domain }),
+        // Send messageBytes only — server derives destDomain and fetches attestation itself
+        body:    JSON.stringify({ messageBytes }),
       });
       const data = await res.json() as { txHash?: string; error?: string; selfRelay?: boolean };
 
       if (res.status === 409) {
-        // Already received — treat as success
+        // Already received on-chain or relayed by this server — treat as success
         setPhase("done");
         return;
+      }
+      // 503 selfRelay: relayer is underfunded — nudge user to the self-relay fallback
+      if (res.status === 503 && data.selfRelay) {
+        setSelfRelayNeeded(true);
+        return; // phase stays "ready", gasless button replaced by amber hint
       }
       if (!res.ok || !data.txHash) {
         throw new Error(data.error ?? "Relay failed");
@@ -492,6 +501,7 @@ export default function CrossChainPage() {
     setAttestWarning(null);
     setBurnExplorer("");
     setReceiveExplorer("");
+    setSelfRelayNeeded(false);
   }
 
   if (!isConnected) {
@@ -744,8 +754,10 @@ export default function CrossChainPage() {
           <div className="px-4 py-3 bg-secondary/30 rounded-b-xl flex items-start gap-2.5 text-xs text-muted-foreground">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="16"/><line x1="8" x2="16" y1="12" y2="12"/></svg>
             <span>
-              Requires 2 transactions on {src.label} (approve + burn) and 1 on {dest.label} (receive).
-              Circle attestation typically takes 10–20 minutes for mainnet finality. No bridge fees — only gas on each chain.
+              Requires 2 transactions on {src.label} (approve + burn).
+              Circle attestation typically takes 10–20 minutes for mainnet finality.
+              The gasless relayer then submits the final receive on {dest.label} — no ETH needed on the destination.
+              No bridge fees.
             </span>
           </div>
         </div>
@@ -786,21 +798,33 @@ export default function CrossChainPage() {
         {phase === "ready" && (
           <div className="flex-1 flex flex-col gap-2">
             {/* Primary: gasless — relayer pays gas, no chain switch needed */}
-            <button
-              onClick={handleGaslessReceive}
-              disabled={isRelaying}
-              className="w-full py-3 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-500 transition-all shadow-[0_0_20px_rgba(34,197,94,0.25)] disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              {isRelaying
-                ? <><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Relaying…</>
-                : <>⚡ Gasless Receive — relayer pays gas</>
-              }
-            </button>
+            {selfRelayNeeded ? (
+              /* Relayer is underfunded — replace gasless button with an amber hint */
+              <div className="w-full px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400 flex items-center gap-2">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                Gasless relayer is temporarily out of ETH on {dest.label} — use self-relay below.
+              </div>
+            ) : (
+              <button
+                onClick={handleGaslessReceive}
+                disabled={isRelaying}
+                className="w-full py-3 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-500 transition-all shadow-[0_0_20px_rgba(34,197,94,0.25)] disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {isRelaying
+                  ? <><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Relaying…</>
+                  : <>⚡ Gasless Receive — relayer pays gas</>
+                }
+              </button>
+            )}
             {/* Fallback: self-relay (user switches chain and pays gas) */}
             <button
               onClick={handleReceive}
               disabled={isRelaying}
-              className="w-full py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-all disabled:opacity-40"
+              className={`w-full py-2 rounded-xl border text-sm font-medium transition-all disabled:opacity-40 ${
+                selfRelayNeeded
+                  ? "border-primary/50 text-primary hover:bg-primary/10"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+              }`}
             >
               Self-relay — switch to {dest.label} &amp; pay gas
             </button>

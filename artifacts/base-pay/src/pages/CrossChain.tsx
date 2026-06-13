@@ -158,6 +158,57 @@ const STEP_LABELS: Record<Phase, string> = {
 
 type CfgChainId = (typeof config)["chains"][number]["id"];
 
+/**
+ * Convert a raw viem/wagmi error into a short, user-readable message.
+ *
+ * viem errors can contain multi-line internal debug output like:
+ *   "Execution reverted with reason: ERC20: transfer amount exceeds balance.
+ *    Raw Call Arguments: from: 0x… to: 0x…"
+ *
+ * We extract only the revert reason and map common ones to plain language.
+ * Everything after "Raw Call Arguments:" is stripped.
+ */
+function sanitizeError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+
+  // User pressed Cancel/Reject in their wallet
+  if (/user rejected|rejected the request|denied transaction|user denied/i.test(raw)) {
+    return "Transaction rejected";
+  }
+
+  // Map common on-chain revert reasons to friendly messages
+  if (/transfer amount exceeds balance|insufficient balance|ERC20: transfer amount/i.test(raw)) {
+    return "Insufficient USDC balance — the transaction was rejected on-chain";
+  }
+  if (/allowance|approve|ERC20: insufficient allowance/i.test(raw) && /revert/i.test(raw)) {
+    return "USDC allowance too low — please retry; a new approval will be requested";
+  }
+  if (/nonce too low|nonce has already been used/i.test(raw)) {
+    return "Transaction nonce conflict — please try again";
+  }
+  if (/gas required exceeds allowance|out of gas/i.test(raw)) {
+    return "Insufficient ETH for gas on this chain";
+  }
+
+  // Extract a clean revert reason line if present
+  const revertMatch =
+    raw.match(/Execution reverted with reason:\s*([^\n.]+)/i) ??
+    raw.match(/reverted with the following reason:\s*([^\n]+)/i);
+  if (revertMatch) {
+    return `Transaction reverted: ${revertMatch[1].trim().slice(0, 120)}`;
+  }
+
+  // Strip viem's "Raw Call Arguments:" debug block and everything after it
+  const stripped = raw.split(/\s*Raw Call Arguments:/i)[0].trimEnd();
+  return stripped.slice(0, 200);
+}
+
+/** Returns true when the error is a definitive on-chain revert (not a timeout or network error). */
+function isOnChainRevert(e: unknown): boolean {
+  const raw = e instanceof Error ? e.message : String(e);
+  return /execution reverted|revert|invalid opcode/i.test(raw);
+}
+
 function TxLink({ hash, explorer }: { hash: string; explorer: string }) {
   return (
     <a
@@ -290,6 +341,7 @@ export default function CrossChainPage() {
   const handleInitiate = useCallback(async () => {
     if (!address || !amount || !recipient) return;
     setError(null);
+    let burnTxSubmitted = false;
 
     try {
       let amountAtomics: bigint;
@@ -337,6 +389,8 @@ export default function CrossChainPage() {
         args:         [amountAtomics, dest.domain, mintRecipient, src.usdc],
         gas:          300_000n,
       });
+      // Track submission locally — used in catch to decide whether to clear the hash
+      burnTxSubmitted = true;
       setBurnTxHash(burnTx);
       setBurnExplorer(src.explorer);
 
@@ -357,8 +411,14 @@ export default function CrossChainPage() {
       setPhase("attesting");
 
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
-      setError(msg.includes("rejected") ? "Transaction rejected" : msg.slice(0, 200));
+      const msg = sanitizeError(e);
+      // If the burn tx was submitted but the receipt shows a definitive on-chain revert,
+      // clear its hash — the burn did NOT happen and the user can retry safely.
+      if (burnTxSubmitted && isOnChainRevert(e)) {
+        setBurnTxHash(null);
+        setBurnExplorer("");
+      }
+      setError(msg);
       setPhase("error");
     }
   }, [address, amount, recipient, src, dest, writeContractAsync, switchChainAsync, chainId, usdcBalanceRaw]);
@@ -389,8 +449,7 @@ export default function CrossChainPage() {
       setPhase("done");
 
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
-      setError(msg.includes("rejected") ? "Transaction rejected" : msg.slice(0, 200));
+      setError(sanitizeError(e));
       setPhase("ready");
     }
   }, [attestation, messageBytes, dest, switchChainAsync, writeContractAsync]);
@@ -434,8 +493,7 @@ export default function CrossChainPage() {
       setResumeTxHash("");
       setPhase("attesting");
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
-      setError(msg.slice(0, 250));
+      setError(sanitizeError(e));
     } finally {
       setIsResuming(false);
     }
@@ -481,8 +539,7 @@ export default function CrossChainPage() {
       });
       setPhase("done");
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
-      setError(msg.slice(0, 200));
+      setError(sanitizeError(e));
       setPhase("ready"); // stay on ready so user can fall back to self-relay
     } finally {
       setIsRelaying(false);

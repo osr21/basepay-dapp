@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAccount, useWriteContract, useSwitchChain, useReadContract, useChainId } from "wagmi";
-import { waitForTransactionReceipt } from "wagmi/actions";
+import { waitForTransactionReceipt, getTransactionReceipt } from "wagmi/actions";
 import { parseUnits, isAddress, decodeAbiParameters, keccak256 } from "viem";
 import { mainnet, optimism, arbitrum, polygon, base } from "viem/chains";
 import type { Chain } from "viem";
@@ -214,6 +214,12 @@ export default function CrossChainPage() {
   const [burnExplorer,    setBurnExplorer]    = useState("");
   const [receiveExplorer, setReceiveExplorer] = useState("");
 
+  // ── Resume flow state ──────────────────────────────────────────────────────
+  const [showResume,     setShowResume]     = useState(false);
+  const [resumeTxHash,   setResumeTxHash]   = useState("");
+  const [resumeSrcIndex, setResumeSrcIndex] = useState(0);
+  const [isResuming,     setIsResuming]     = useState(false);
+
   const isActive = phase !== "idle" && phase !== "done" && phase !== "error";
 
   // ── Chain selector helpers ─────────────────────────────────────────────────
@@ -386,6 +392,52 @@ export default function CrossChainPage() {
     }
   }, [attestation, messageBytes, dest, switchChainAsync, writeContractAsync]);
 
+  // ── Resume a failed transfer from a burn tx hash ──────────────────────────
+  // Fetches the receipt on-chain, parses the MessageSent log, auto-detects the
+  // destination domain from the CCTP message header, and jumps to attestation.
+  const handleResume = useCallback(async () => {
+    if (!resumeTxHash) return;
+    setIsResuming(true);
+    setError(null);
+    try {
+      const trimmed = resumeTxHash.trim();
+      if (!/^0x[0-9a-fA-F]{64}$/.test(trimmed)) {
+        throw new Error("Invalid transaction hash — paste the full 0x-prefixed hash from the source chain explorer");
+      }
+      const resumeSrcCfg = CHAINS[resumeSrcIndex];
+      const receipt = await getTransactionReceipt(config, {
+        hash:    trimmed as `0x${string}`,
+        chainId: resumeSrcCfg.chain.id as CfgChainId,
+      });
+      const log = receipt.logs.find(
+        l => l.address.toLowerCase() === resumeSrcCfg.messageTransmitter.toLowerCase()
+          && l.topics[0] === MESSAGE_SENT_TOPIC,
+      );
+      if (!log) throw new Error("No MessageSent event found — check you selected the correct source chain");
+      const [msgBytes] = decodeAbiParameters([{ type: "bytes" }], log.data);
+      const msgHash    = keccak256(msgBytes);
+      // CCTP message header: 4 bytes version | 4 bytes sourceDomain | 4 bytes destinationDomain
+      // As 0x-prefixed hex: chars 18–26 = destination domain uint32 big-endian
+      const destDomain   = parseInt(msgBytes.slice(18, 26), 16);
+      const detectedDest = CHAINS.findIndex(c => c.domain === destDomain);
+      if (detectedDest === -1) throw new Error(`Unsupported destination domain ${destDomain}`);
+      setBurnTxHash(trimmed as `0x${string}`);
+      setBurnExplorer(resumeSrcCfg.explorer);
+      setMessageBytes(msgBytes);
+      setMessageHash(msgHash);
+      setSrcIndex(resumeSrcIndex);
+      setDestIndex(detectedDest);
+      setShowResume(false);
+      setResumeTxHash("");
+      setPhase("attesting");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      setError(msg.slice(0, 250));
+    } finally {
+      setIsResuming(false);
+    }
+  }, [resumeTxHash, resumeSrcIndex]);
+
   function reset() {
     setPhase("idle");
     setBurnTxHash(null);
@@ -489,9 +541,20 @@ export default function CrossChainPage() {
             </div>
           )}
           {messageHash && (
-            <div className="text-xs text-muted-foreground">
-              <span>Message hash: </span>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Message hash:</span>
               <code className="font-mono text-[10px]">{messageHash.slice(0, 18)}…</code>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(messageHash)}
+                title="Copy full message hash"
+                className="hover:text-foreground transition-colors"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect width="13" height="13" x="9" y="9" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+              </button>
             </div>
           )}
           {receiveTxHash && receiveExplorer && (
@@ -722,6 +785,75 @@ export default function CrossChainPage() {
               <p>{desc}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Resume a failed transfer */}
+      {phase === "idle" && (
+        <div className="rounded-xl border border-border bg-card/20 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowResume(s => !s)}
+            className="w-full px-4 py-3 flex items-center justify-between text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors"
+          >
+            <span className="flex items-center gap-2 font-medium">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              Resume a failed transfer
+            </span>
+            <svg
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              className={`transition-transform ${showResume ? "rotate-180" : ""}`}
+            >
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+
+          {showResume && (
+            <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+              <p className="text-xs text-muted-foreground">
+                If your burn tx succeeded but attestation timed out or the page was closed, paste the burn transaction hash below.
+                The app will re-fetch the message from the chain and resume from attestation — <strong className="text-foreground">no re-burning needed</strong>.
+              </p>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Source chain (where you burned)</label>
+                <div className="relative">
+                  <select
+                    value={resumeSrcIndex}
+                    onChange={e => setResumeSrcIndex(Number(e.target.value))}
+                    className="w-full appearance-none px-3 py-2 rounded-lg border border-border bg-secondary text-sm font-medium text-foreground focus:outline-none focus:border-primary/60 transition-colors cursor-pointer pr-7"
+                  >
+                    {CHAINS.map((c, i) => (
+                      <option key={c.label} value={i}>{c.icon} {c.label}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-muted-foreground"><path d="M6 9l6 6 6-6"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Burn transaction hash</label>
+                <input
+                  type="text"
+                  placeholder="0x…"
+                  value={resumeTxHash}
+                  onChange={e => setResumeTxHash(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-secondary text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/60 transition-colors"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResume}
+                disabled={!resumeTxHash.trim() || isResuming}
+                className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-40"
+              >
+                {isResuming ? "Looking up transaction…" : "Resume Transfer →"}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

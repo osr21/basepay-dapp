@@ -256,8 +256,19 @@ export default function CrossChainPage() {
       if (!cancelled) {
         count++;
         setPollCount(count);
+        // Hard stop at 720 polls (~1 hour) — burn is safe on-chain, Circle is likely down
+        if (count >= 720) {
+          if (!cancelled) {
+            setError(
+              "Attestation timed out after 1 hour. Your USDC is safely burned and will not be lost. " +
+              "Check https://status.circle.com — when Circle recovers, refresh and use the burn tx link to resubmit the receive step."
+            );
+            setPhase("error");
+          }
+          return;
+        }
         if (count >= 120) setAttestWarning("very-slow");
-        else if (count >= 24) setAttestWarning("slow");
+        else if (count >= 60) setAttestWarning("slow");
         tid = setTimeout(poll, 5_000);
       }
     }
@@ -276,7 +287,7 @@ export default function CrossChainPage() {
       try {
         amountAtomics = parseUnits(amount, 6);
       } catch {
-        throw new Error("Too many decimal places — USDC supports up to 6 decimal places");
+        throw new Error("Invalid amount — USDC supports up to 6 decimal places");
       }
 
       if (amountAtomics <= 0n) throw new Error("Amount must be greater than 0");
@@ -290,7 +301,7 @@ export default function CrossChainPage() {
 
       // Ensure wallet is on the source chain before touching source contracts
       if (chainId !== src.chain.id) {
-        setPhase("approving");
+        setPhase("switching");
         await switchChainAsync({ chainId: src.chain.id });
       }
 
@@ -655,12 +666,15 @@ export default function CrossChainPage() {
             >
               Start Over
             </button>
-            <button
-              onClick={handleInitiate}
-              className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all"
-            >
-              Retry
-            </button>
+            {/* Hide Retry if the burn already went on-chain — re-running would burn USDC again */}
+            {!burnTxHash && (
+              <button
+                onClick={handleInitiate}
+                className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all"
+              >
+                Retry
+              </button>
+            )}
           </>
         )}
 

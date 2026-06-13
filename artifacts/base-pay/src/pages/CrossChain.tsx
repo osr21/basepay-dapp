@@ -432,6 +432,21 @@ export default function CrossChainPage() {
       setPhase("switching");
       await switchChainAsync({ chainId: dest.chain.id });
 
+      // ── MetaMask RPC transport race mitigation ───────────────────────────────
+      // wallet_switchEthereumChain (and addEthereumChain) resolve their Promise
+      // before MetaMask's internal JSON-RPC router has fully switched to the new
+      // endpoint.  Submitting a transaction immediately after the switch resolves
+      // can send it to the *source* chain, causing an on-chain "Invalid
+      // destination domain" revert.
+      //
+      // Root cause confirmed across multiple CCTP implementations:
+      //   osr21/arc-relay-bridge#6  — "Invalid destination domain" revert
+      //   osr21/arc-relay-bridge#1  — wallet_switchEthereumChain false resolve
+      //
+      // Fix: a short stabilisation pause lets MetaMask's RPC router fully switch
+      // before wagmi validates the chain and dispatches the transaction.
+      await new Promise(r => setTimeout(r, 400));
+
       setPhase("receiving");
       const destChainId = dest.chain.id as CfgChainId;
       const receiveTx = await writeContractAsync({

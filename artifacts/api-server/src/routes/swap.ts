@@ -8,9 +8,9 @@ import {
   type Hex,
 } from "viem";
 import { base } from "viem/chains";
-import { privateKeyToAccount } from "viem/accounts";
+import { type privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
-import { baseTransport, basePublicClient as publicClient } from "../lib/rpc";
+import { baseTransport, basePublicClient as publicClient, getRelayerAccount, getChainWalletClient } from "../lib/rpc";
 
 const router = Router();
 
@@ -18,16 +18,11 @@ type Relayer = {
   client:  ReturnType<typeof createWalletClient>;
   account: ReturnType<typeof privateKeyToAccount>;
 };
-let _relayer: Relayer | null = null;
+
 function getRelayer(): Relayer {
-  if (_relayer) return _relayer;
-  const pk = process.env.DEPLOYER_PRIVATE_KEY;
-  if (!pk) throw new Error("DEPLOYER_PRIVATE_KEY not set");
-  const key = pk.startsWith("0x") ? (pk as Hex) : (`0x${pk}` as Hex);
-  const account = privateKeyToAccount(key);
-  const client  = createWalletClient({ account, chain: base, transport: baseTransport });
-  _relayer = { client, account };
-  return _relayer;
+  const account = getRelayerAccount();
+  const client  = getChainWalletClient(base);
+  return { client, account };
 }
 
 // ── Retry helper for sequencer "in-flight transaction limit" ─────────────────

@@ -10,12 +10,12 @@ import {
   formatEther,
 } from "viem";
 import { base } from "viem/chains";
-import { privateKeyToAccount } from "viem/accounts";
+import { type privateKeyToAccount } from "viem/accounts";
 import { Attribution } from "ox/erc8021";
 import { db, gaslessNoncesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { baseTransport, basePublicClient as publicClient } from "../lib/rpc";
+import { baseTransport, basePublicClient as publicClient, getRelayerAccount } from "../lib/rpc";
 
 // ── Base Builder Code (ERC-8021) ─────────────────────────────────────────────
 const _builderCode = process.env.BASE_BUILDER_CODE;
@@ -33,10 +33,7 @@ let _relayer: Relayer | null = null;
 
 function getRelayer(): Relayer {
   if (_relayer) return _relayer;
-  const pk = process.env.DEPLOYER_PRIVATE_KEY;
-  if (!pk) throw new Error("DEPLOYER_PRIVATE_KEY not set");
-  const key = pk.startsWith("0x") ? (pk as Hex) : (`0x${pk}` as Hex);
-  const account = privateKeyToAccount(key);
+  const account = getRelayerAccount();
   const client  = createWalletClient({
     account,
     chain: base,

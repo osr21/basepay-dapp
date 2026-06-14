@@ -1,5 +1,5 @@
 {
-  "name": "@basepay/contracts",
+  "name": "@basepayarc/contracts",
   "version": "2.0.0",
   "description": "BasePay V2 smart contract ABIs, typed addresses, and integration examples for Base Mainnet (chainId 8453)",
   "license": "MIT",

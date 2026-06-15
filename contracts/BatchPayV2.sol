@@ -6,6 +6,7 @@ interface IERC20 {
 }
 
 interface IERC20Permit is IERC20 {
+    function allowance(address owner, address spender) external view returns (uint256);
     function permit(
         address owner,
         address spender,
@@ -69,6 +70,11 @@ contract BatchPayV2 {
     /**
      * @notice Permit flow: sign one EIP-2612 message for the total gross amount,
      *         no approve() transaction required.
+     *
+     *         Front-run protection: if a third party already consumed this permit
+     *         nonce (setting the allowance), we skip the permit call rather than
+     *         reverting, and proceed with the existing allowance.
+     *
      * @param permitAmount  The value field in the permit — must be >= total gross
      * @param deadline      Unix timestamp for permit expiry
      * @param v, r, s       Permit signature components
@@ -84,7 +90,9 @@ contract BatchPayV2 {
         bytes32 r,
         bytes32 s
     ) external notPaused {
-        IERC20Permit(token).permit(msg.sender, address(this), permitAmount, deadline, v, r, s);
+        if (IERC20Permit(token).allowance(msg.sender, address(this)) < permitAmount) {
+            IERC20Permit(token).permit(msg.sender, address(this), permitAmount, deadline, v, r, s);
+        }
         _doBatch(token, msg.sender, recipients, amounts, memo);
     }
 

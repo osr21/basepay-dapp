@@ -7,6 +7,7 @@ interface IERC20 {
 }
 
 interface IERC20Permit is IERC20 {
+    function allowance(address owner, address spender) external view returns (uint256);
     function permit(
         address owner,
         address spender,
@@ -83,6 +84,11 @@ contract BasePayRouterV2 {
      * @notice Transfer using an EIP-2612 permit signature.
      *         No prior approve() transaction required — the user signs a
      *         typed message off-chain and this contract consumes it.
+     *
+     *         Front-run protection: if another party already consumed this
+     *         permit nonce (setting the allowance), we skip the permit call
+     *         rather than reverting, and proceed with the existing allowance.
+     *
      * @param deadline  Unix timestamp after which the permit is invalid
      * @param v, r, s   Components of the secp256k1 permit signature
      */
@@ -96,7 +102,9 @@ contract BasePayRouterV2 {
         bytes32 r,
         bytes32 s
     ) external notPaused {
-        IERC20Permit(token).permit(msg.sender, address(this), amount, deadline, v, r, s);
+        if (IERC20Permit(token).allowance(msg.sender, address(this)) < amount) {
+            IERC20Permit(token).permit(msg.sender, address(this), amount, deadline, v, r, s);
+        }
         _doSend(token, msg.sender, recipient, amount, memo);
     }
 

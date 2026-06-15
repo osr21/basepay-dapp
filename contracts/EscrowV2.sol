@@ -7,6 +7,7 @@ interface IERC20 {
 }
 
 interface IERC20Permit is IERC20 {
+    function allowance(address owner, address spender) external view returns (uint256);
     function permit(
         address owner,
         address spender,
@@ -22,6 +23,13 @@ interface IERC20Permit is IERC20 {
  * @title EscrowV2
  * @notice Hold USDC in escrow between a payer and a payee.
  *         V2 adds createWithPermit() — EIP-2612 signature replaces approve().
+ *
+ * Release model:
+ *   - Either the payee OR the payer may call release() at any time before expiry.
+ *     Payee calls it to claim payment after delivering work.
+ *     Payer calls it to voluntarily approve early payment to the payee.
+ *   - Only the payer may call refund(), and only after the escrow has expired
+ *     without being released.
  */
 contract EscrowV2 {
     enum State { Active, Released, Refunded }
@@ -52,7 +60,7 @@ contract EscrowV2 {
         uint256 expiry,
         string  memo
     );
-    event EscrowReleased(uint256 indexed id, uint256 feeAmount, uint256 netAmount);
+    event EscrowReleased(uint256 indexed id, address indexed releasedBy, uint256 feeAmount, uint256 netAmount);
     event EscrowRefunded(uint256 indexed id, uint256 amount);
     event FeeCollectorUpdated(address indexed previous, address indexed next);
     event FeeBpsUpdated(uint256 previous, uint256 next);
@@ -83,6 +91,11 @@ contract EscrowV2 {
 
     /**
      * @notice Permit flow: sign an EIP-2612 message, no approve() tx needed.
+     *
+     *         Front-run protection: if a third party already consumed this permit
+     *         nonce (setting the allowance), we skip the permit call rather than
+     *         reverting, and proceed with the existing allowance.
+     *
      * @param deadline  Permit deadline (should be >= block.timestamp + ttl for safety)
      * @param v, r, s   Permit signature components
      */
@@ -97,7 +110,9 @@ contract EscrowV2 {
         bytes32 r,
         bytes32 s
     ) external returns (uint256 id) {
-        IERC20Permit(token).permit(msg.sender, address(this), amount, deadline, v, r, s);
+        if (IERC20Permit(token).allowance(msg.sender, address(this)) < amount) {
+            IERC20Permit(token).permit(msg.sender, address(this), amount, deadline, v, r, s);
+        }
         return _doCreate(token, msg.sender, payee, amount, ttl, memo);
     }
 
@@ -132,11 +147,19 @@ contract EscrowV2 {
         emit EscrowCreated(id, payer, payee, token, amount, block.timestamp + ttl, memo);
     }
 
+    /**
+     * @notice Release the escrowed funds to the payee, deducting the protocol fee.
+     *         Callable by either the payee (to claim after delivering work) or the
+     *         payer (to voluntarily approve early payment).
+     */
     function release(uint256 id) external {
         EscrowRecord storage e = escrows[id];
         require(e.amount > 0,             "EscrowV2: not found");
         require(e.state == State.Active,  "EscrowV2: not active");
-        require(msg.sender == e.payee,    "EscrowV2: not payee");
+        require(
+            msg.sender == e.payee || msg.sender == e.payer,
+            "EscrowV2: not authorised"
+        );
 
         e.state = State.Released;
         uint256 fee = (e.amount * feeBps) / 10_000;
@@ -144,9 +167,13 @@ contract EscrowV2 {
 
         if (fee > 0) require(IERC20(e.token).transfer(feeCollector, fee), "EscrowV2: fee failed");
         require(IERC20(e.token).transfer(e.payee, net), "EscrowV2: release failed");
-        emit EscrowReleased(id, fee, net);
+        emit EscrowReleased(id, msg.sender, fee, net);
     }
 
+    /**
+     * @notice Refund the escrowed amount back to the payer.
+     *         Only callable by the payer, and only after the escrow has expired.
+     */
     function refund(uint256 id) external {
         EscrowRecord storage e = escrows[id];
         require(e.amount > 0,              "EscrowV2: not found");

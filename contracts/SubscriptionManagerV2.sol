@@ -6,6 +6,7 @@ interface IERC20 {
 }
 
 interface IERC20Permit is IERC20 {
+    function allowance(address owner, address spender) external view returns (uint256);
     function permit(
         address owner,
         address spender,
@@ -85,6 +86,11 @@ contract SubscriptionManagerV2 {
      * @notice Permit flow: sets an allowance via EIP-2612 (no approve() tx).
      *         Use permitAmount = type(uint256).max and a far-future deadline
      *         so recurring charges can proceed without re-approval.
+     *
+     *         Front-run protection: if a third party already consumed this permit
+     *         nonce (setting the allowance), we skip the permit call rather than
+     *         reverting, and proceed with the existing allowance.
+     *
      * @param permitAmount  Allowance to grant — use max uint256 for open-ended subs
      * @param deadline      Permit deadline — use far future (e.g. year 2100) for recurring
      * @param v, r, s       Permit signature components
@@ -101,7 +107,9 @@ contract SubscriptionManagerV2 {
         bytes32 r,
         bytes32 s
     ) external returns (uint256 id) {
-        IERC20Permit(token).permit(msg.sender, address(this), permitAmount, deadline, v, r, s);
+        if (IERC20Permit(token).allowance(msg.sender, address(this)) < permitAmount) {
+            IERC20Permit(token).permit(msg.sender, address(this), permitAmount, deadline, v, r, s);
+        }
         return _doSubscribe(token, msg.sender, payee, amount, interval, memo);
     }
 
@@ -136,6 +144,11 @@ contract SubscriptionManagerV2 {
         emit Subscribed(id, payer, payee, token, amount, interval, memo);
     }
 
+    /**
+     * @notice Collect a recurring charge. Anyone may call this once the interval
+     *         has elapsed. The schedule is always anchored to the original
+     *         startTime so late calls do not drift subsequent due dates forward.
+     */
     function charge(uint256 id) external {
         Subscription storage s = subscriptions[id];
         require(s.amount > 0, "SubMgrV2: not found");
@@ -144,7 +157,9 @@ contract SubscriptionManagerV2 {
         uint256 due = s.lastCharged == 0 ? s.startTime : s.lastCharged + s.interval;
         require(block.timestamp >= due, "SubMgrV2: not due yet");
 
-        s.lastCharged = block.timestamp;
+        // Anchor to `due`, not `block.timestamp`, so the schedule cannot drift
+        // forward when charge() is called late.
+        s.lastCharged = due;
 
         uint256 fee = (s.amount * feeBps) / 10_000;
         uint256 net = s.amount - fee;

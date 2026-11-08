@@ -5,6 +5,352 @@
  * BasePay — USDC Payments on Base Network
  * OpenAPI spec version: 0.1.0
  */
+export interface StockflowPilotParticipant {
+  wallet: string;
+  countryCode: string;
+  approved: boolean;
+  expiresAt: string;
+  reviewedBy: string;
+  updatedAt: string;
+}
+
+export interface StockflowPilotSession {
+  authenticated: boolean;
+  /** @nullable */
+  address: string | null;
+  isAdmin: boolean;
+  enabled: boolean;
+  approved: boolean;
+  reason: string;
+  participant: StockflowPilotParticipant | null;
+}
+
+export type StockflowTradeQuoteSide = typeof StockflowTradeQuoteSide[keyof typeof StockflowTradeQuoteSide];
+
+
+export const StockflowTradeQuoteSide = {
+  buy: 'buy',
+  sell: 'sell',
+} as const;
+
+export interface StockflowTradeQuote {
+  id: string;
+  chainId: number;
+  wallet: string;
+  stockAddress: string;
+  symbol: string;
+  side: StockflowTradeQuoteSide;
+  router: string;
+  factory: string;
+  pool: string;
+  tickSpacing: number;
+  tokenIn: string;
+  tokenOut: string;
+  decimalsIn: number;
+  decimalsOut: number;
+  amountIn: string;
+  amountOut: string;
+  minimumOut: string;
+  slippageBps: number;
+  priceImpactBps: number;
+  expiresAt: string;
+  deadline: number;
+  blockNumber: string;
+}
+
+/**
+ * Network cost in decimal wei strings. Null means unavailable, never zero. Excludes pool and service fees.
+ */
+export interface StockflowNetworkFee {
+  /**
+     * @nullable
+     * @pattern ^[0-9]{1,78}$
+     */
+  executionWei: string | null;
+  /**
+     * @nullable
+     * @pattern ^[0-9]{1,78}$
+     */
+  l1DataWei: string | null;
+  /**
+     * @nullable
+     * @pattern ^[0-9]{1,78}$
+     */
+  operatorWei: string | null;
+  /**
+     * @nullable
+     * @pattern ^[0-9]{1,78}$
+     */
+  totalWei: string | null;
+}
+
+export interface StockflowTradeSubmission {
+  quoteId: string;
+  /** @pattern ^0x[a-fA-F0-9]{64}$ */
+  hash: string;
+  /** @maxItems 20 */
+  replacementHashes?: string[];
+  /** Client-reported estimate reviewed before signing, not an authoritative paid fee. */
+  reviewedSwapFee?: StockflowNetworkFee | null;
+}
+
+export type StockflowTradeRecordSide = typeof StockflowTradeRecordSide[keyof typeof StockflowTradeRecordSide];
+
+
+export const StockflowTradeRecordSide = {
+  buy: 'buy',
+  sell: 'sell',
+} as const;
+
+export type StockflowTradeRecordStatus = typeof StockflowTradeRecordStatus[keyof typeof StockflowTradeRecordStatus];
+
+
+export const StockflowTradeRecordStatus = {
+  pending: 'pending',
+  confirmed: 'confirmed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+  changed: 'changed',
+} as const;
+
+export interface StockflowTradeRecord {
+  hash: string;
+  originalHash: string;
+  replacementHashes: string[];
+  quoteId: string;
+  symbol: string;
+  side: StockflowTradeRecordSide;
+  status: StockflowTradeRecordStatus;
+  amountIn: string;
+  /** @nullable */
+  amountOut: string | null;
+  networkFees?: StockflowNetworkFee | null;
+  reviewedSwapFee?: StockflowNetworkFee | null;
+  decimalsIn: number;
+  decimalsOut: number;
+  createdAt: string;
+}
+
+export interface StockflowAllocation {
+  /** @pattern ^0x[0-9a-fA-F]{40}$ */
+  address: string;
+  /**
+     * @minLength 1
+     * @maxLength 30
+     */
+  symbol: string;
+  /**
+     * @maximum 100
+     * @exclusiveMinimum 0
+     */
+  weight: number;
+}
+
+export type StockflowIncomePolicyStatus = typeof StockflowIncomePolicyStatus[keyof typeof StockflowIncomePolicyStatus];
+
+
+export const StockflowIncomePolicyStatus = {
+  active: 'active',
+  revoked: 'revoked',
+} as const;
+
+export interface StockflowIncomePolicy {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  /**
+     * @maximum 100
+     * @exclusiveMinimum 0
+     */
+  incomePct: number;
+  /**
+     * @maximum 1000000000
+     * @exclusiveMinimum 0
+     */
+  maxPerPurchase: number;
+  /**
+     * @maximum 1000000000
+     * @exclusiveMinimum 0
+     */
+  dailyMax: number;
+  expiresAt: number;
+  status: StockflowIncomePolicyStatus;
+  createdAt: number;
+  updatedAt: number;
+  /**
+     * @minItems 1
+     * @maxItems 50
+     */
+  allocations: StockflowAllocation[];
+}
+
+export interface StockflowIncomePolicyInput {
+  policy: StockflowIncomePolicy | null;
+  /** @maxLength 4096 */
+  signature: string;
+  timestamp: number;
+}
+
+export interface StockflowIncomeSyncInput {
+  /** @maxLength 4096 */
+  signature: string;
+  timestamp: number;
+  /**
+     * Optional historical transaction to verify, outside the automatic scan window.
+     * @pattern ^0x[0-9a-fA-F]{64}$
+     */
+  txHash?: string;
+}
+
+export type StockflowProposalReviewInputStatus = typeof StockflowProposalReviewInputStatus[keyof typeof StockflowProposalReviewInputStatus];
+
+
+export const StockflowProposalReviewInputStatus = {
+  reviewed: 'reviewed',
+  dismissed: 'dismissed',
+} as const;
+
+export interface StockflowProposalReviewInput {
+  status: StockflowProposalReviewInputStatus;
+  /** @maxLength 4096 */
+  signature: string;
+  timestamp: number;
+}
+
+export type StockflowIncomeReceiptToken = typeof StockflowIncomeReceiptToken[keyof typeof StockflowIncomeReceiptToken];
+
+
+export const StockflowIncomeReceiptToken = {
+  USDC: 'USDC',
+  EURC: 'EURC',
+} as const;
+
+export type StockflowIncomeReceiptStatus = typeof StockflowIncomeReceiptStatus[keyof typeof StockflowIncomeReceiptStatus];
+
+
+export const StockflowIncomeReceiptStatus = {
+  confirming: 'confirming',
+  confirmed: 'confirmed',
+  orphaned: 'orphaned',
+} as const;
+
+export interface StockflowIncomeReceipt {
+  id: string;
+  txHash: string;
+  logIndex: number;
+  /** Stable transaction-local log offset used for identity across reorgs. */
+  receiptIndex: number;
+  token: StockflowIncomeReceiptToken;
+  tokenAddress: string;
+  /** @pattern ^[0-9]+$ */
+  amountAtomic: string;
+  sender: string;
+  blockNumber: string;
+  blockHash: string;
+  receivedAt: string;
+  confirmations: number;
+  status: StockflowIncomeReceiptStatus;
+  paymentRequestIds: string[];
+}
+
+export interface StockflowProposalLine {
+  address: string;
+  symbol: string;
+  amountUsd: string;
+}
+
+export type StockflowIncomeProposalStatus = typeof StockflowIncomeProposalStatus[keyof typeof StockflowIncomeProposalStatus];
+
+
+export const StockflowIncomeProposalStatus = {
+  pending_review: 'pending_review',
+  reviewed: 'reviewed',
+  dismissed: 'dismissed',
+  invalidated: 'invalidated',
+  blocked: 'blocked',
+} as const;
+
+export interface StockflowIncomeProposal {
+  id: string;
+  receiptId: string;
+  policy: StockflowIncomePolicy;
+  totalUsd: string;
+  lines: StockflowProposalLine[];
+  status: StockflowIncomeProposalStatus;
+  /** @nullable */
+  reason: string | null;
+  createdAt: string;
+  /** @nullable */
+  reviewedAt: string | null;
+}
+
+export interface StockflowIncome {
+  wallet: string;
+  chainId: number;
+  requiredConfirmations: number;
+  policy: StockflowIncomePolicy | null;
+  receipts: StockflowIncomeReceipt[];
+  proposals: StockflowIncomeProposal[];
+  /** @nullable */
+  scanStartBlock: string | null;
+  /** @nullable */
+  scannedThroughBlock: string | null;
+  /** @nullable */
+  scannedBlockHash: string | null;
+  /** @nullable */
+  headBlock: string | null;
+  /** @nullable */
+  syncedAt: string | null;
+}
+
+export interface StockflowStock {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  /** @nullable */
+  multiplier: number | null;
+  /** @nullable */
+  referencePrice: number | null;
+  /** @nullable */
+  priceUpdatedAt: string | null;
+  /** @nullable */
+  iconUrl: string | null;
+  pausedFeatures: string[];
+}
+
+export interface StockflowCatalogue {
+  stocks: StockflowStock[];
+  fetchedAt: string;
+  source: string;
+  chainId: number;
+}
+
+export interface StockflowPosition {
+  address: string;
+  rawBalance: string;
+  tokenBalance: string;
+  /** @nullable */
+  shareBalance: string | null;
+  /** @nullable */
+  referenceValue: number | null;
+}
+
+export interface StockflowPositions {
+  wallet: string;
+  positions: StockflowPosition[];
+  failedReads: number;
+  fetchedAt: string;
+  blockNumber: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -237,6 +583,86 @@ export interface SwapResult {
 export interface ErrorResponse {
   error: string;
 }
+
+export type StockflowErrorResponse = {
+  error: string;
+};
+
+export type StockflowSignatureParameter = string;
+
+export type StockflowTimestampParameter = number;
+
+export type CreateStockflowPilotChallengeBody = {
+  address: string;
+};
+
+export type CreateStockflowPilotChallenge200 = {
+  id: string;
+  message: string;
+};
+
+export type AuthenticateStockflowPilotBody = {
+  address: string;
+  challengeId: string;
+  signature: string;
+};
+
+export type LogoutStockflowPilot200 = {
+  success: boolean;
+};
+
+export type SaveStockflowPilotParticipantBody = {
+  wallet: string;
+  countryCode: string;
+  /**
+     * @minimum 1
+     * @maximum 30
+     */
+  days: number;
+  approved: boolean;
+  reviewConfirmed: boolean;
+};
+
+export type CreateStockflowTradeQuoteBodySide = typeof CreateStockflowTradeQuoteBodySide[keyof typeof CreateStockflowTradeQuoteBodySide];
+
+
+export const CreateStockflowTradeQuoteBodySide = {
+  buy: 'buy',
+  sell: 'sell',
+} as const;
+
+export type CreateStockflowTradeQuoteBody = {
+  stockAddress: string;
+  side: CreateStockflowTradeQuoteBodySide;
+  /** Human-readable input quantity, USDC for buys or stock tokens for sells. Never raw integer units. */
+  amount: string;
+  /**
+     * @minimum 10
+     * @maximum 100
+     */
+  slippageBps: number;
+};
+
+export type PrepareStockflowTradeBody = {
+  quoteId: string;
+};
+
+export type PrepareStockflowTrade200 = {
+  quote: StockflowTradeQuote;
+  balance: string;
+  allowance: string;
+  approvalRequired: boolean;
+  simulated: boolean;
+};
+
+export type GetStockflowIncomeParams = {
+/**
+ * @maxLength 4096
+ * @pattern ^0x[0-9a-fA-F]+$
+ */
+signature: StockflowSignatureParameter;
+timestamp: StockflowTimestampParameter;
+};
 
 export type ListContactsParams = {
 ownerAddress?: string;

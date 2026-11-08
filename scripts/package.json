@@ -17,9 +17,15 @@
     "deploy-batch-pay-v2": "tsx ./src/deploy-batch-pay-v2.ts",
     "deploy-escrow-v2": "tsx ./src/deploy-escrow-v2.ts",
     "deploy-subscription-manager-v2": "tsx ./src/deploy-subscription-manager-v2.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "compile:stockflow": "node ./src/compile-stockflow.mjs",
+    "test:stockflow-sandbox": "node ./test/stockflow-sandbox.test.mjs",
+    "test:stockflow-income": "tsx --test ./test/stockflow-income.test.ts",
+    "test:stockflow-fees": "tsx --test ../artifacts/api-server/test/stockflow-fees.test.ts",
+    "test:stockflow-pilot": "tsx ../artifacts/api-server/test/stockflow-pilot.test.ts"
   },
   "devDependencies": {
+    "ganache": "7.9.2",
     "@types/node": "catalog:",
     "tsx": "catalog:"
   },

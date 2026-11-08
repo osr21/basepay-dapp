@@ -8,6 +8,900 @@
 import * as zod from 'zod';
 
 
+export const GetStockflowPilotSessionResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "address": zod.string().nullable(),
+  "isAdmin": zod.boolean(),
+  "enabled": zod.boolean(),
+  "approved": zod.boolean(),
+  "reason": zod.string(),
+  "participant": zod.union([zod.object({
+  "wallet": zod.string(),
+  "countryCode": zod.string(),
+  "approved": zod.boolean(),
+  "expiresAt": zod.string(),
+  "reviewedBy": zod.string(),
+  "updatedAt": zod.string()
+}),zod.null()])
+})
+
+
+export const CreateStockflowPilotChallengeBody = zod.object({
+  "address": zod.string()
+})
+
+export const CreateStockflowPilotChallengeResponse = zod.object({
+  "id": zod.string(),
+  "message": zod.string()
+})
+
+
+export const AuthenticateStockflowPilotBody = zod.object({
+  "address": zod.string(),
+  "challengeId": zod.string(),
+  "signature": zod.string()
+})
+
+export const AuthenticateStockflowPilotResponse = zod.object({
+  "authenticated": zod.boolean(),
+  "address": zod.string().nullable(),
+  "isAdmin": zod.boolean(),
+  "enabled": zod.boolean(),
+  "approved": zod.boolean(),
+  "reason": zod.string(),
+  "participant": zod.union([zod.object({
+  "wallet": zod.string(),
+  "countryCode": zod.string(),
+  "approved": zod.boolean(),
+  "expiresAt": zod.string(),
+  "reviewedBy": zod.string(),
+  "updatedAt": zod.string()
+}),zod.null()])
+})
+
+
+export const LogoutStockflowPilotResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+export const ListStockflowPilotParticipantsResponseItem = zod.object({
+  "wallet": zod.string(),
+  "countryCode": zod.string(),
+  "approved": zod.boolean(),
+  "expiresAt": zod.string(),
+  "reviewedBy": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListStockflowPilotParticipantsResponse = zod.array(ListStockflowPilotParticipantsResponseItem)
+
+
+export const saveStockflowPilotParticipantBodyDaysMax = 30;
+
+
+
+export const SaveStockflowPilotParticipantBody = zod.object({
+  "wallet": zod.string(),
+  "countryCode": zod.string(),
+  "days": zod.number().min(1).max(saveStockflowPilotParticipantBodyDaysMax),
+  "approved": zod.boolean(),
+  "reviewConfirmed": zod.boolean()
+})
+
+export const SaveStockflowPilotParticipantResponse = zod.object({
+  "wallet": zod.string(),
+  "countryCode": zod.string(),
+  "approved": zod.boolean(),
+  "expiresAt": zod.string(),
+  "reviewedBy": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+export const createStockflowTradeQuoteBodySlippageBpsMin = 10;
+export const createStockflowTradeQuoteBodySlippageBpsMax = 100;
+
+
+
+export const CreateStockflowTradeQuoteBody = zod.object({
+  "stockAddress": zod.string(),
+  "side": zod.enum(['buy', 'sell']),
+  "amount": zod.string().describe('Human-readable input quantity, USDC for buys or stock tokens for sells. Never raw integer units.'),
+  "slippageBps": zod.number().min(createStockflowTradeQuoteBodySlippageBpsMin).max(createStockflowTradeQuoteBodySlippageBpsMax)
+})
+
+export const CreateStockflowTradeQuoteResponse = zod.object({
+  "id": zod.string(),
+  "chainId": zod.number(),
+  "wallet": zod.string(),
+  "stockAddress": zod.string(),
+  "symbol": zod.string(),
+  "side": zod.enum(['buy', 'sell']),
+  "router": zod.string(),
+  "factory": zod.string(),
+  "pool": zod.string(),
+  "tickSpacing": zod.number(),
+  "tokenIn": zod.string(),
+  "tokenOut": zod.string(),
+  "decimalsIn": zod.number(),
+  "decimalsOut": zod.number(),
+  "amountIn": zod.string(),
+  "amountOut": zod.string(),
+  "minimumOut": zod.string(),
+  "slippageBps": zod.number(),
+  "priceImpactBps": zod.number(),
+  "expiresAt": zod.string(),
+  "deadline": zod.number(),
+  "blockNumber": zod.string()
+})
+
+
+export const PrepareStockflowTradeBody = zod.object({
+  "quoteId": zod.string()
+})
+
+export const PrepareStockflowTradeResponse = zod.object({
+  "quote": zod.object({
+  "id": zod.string(),
+  "chainId": zod.number(),
+  "wallet": zod.string(),
+  "stockAddress": zod.string(),
+  "symbol": zod.string(),
+  "side": zod.enum(['buy', 'sell']),
+  "router": zod.string(),
+  "factory": zod.string(),
+  "pool": zod.string(),
+  "tickSpacing": zod.number(),
+  "tokenIn": zod.string(),
+  "tokenOut": zod.string(),
+  "decimalsIn": zod.number(),
+  "decimalsOut": zod.number(),
+  "amountIn": zod.string(),
+  "amountOut": zod.string(),
+  "minimumOut": zod.string(),
+  "slippageBps": zod.number(),
+  "priceImpactBps": zod.number(),
+  "expiresAt": zod.string(),
+  "deadline": zod.number(),
+  "blockNumber": zod.string()
+}),
+  "balance": zod.string(),
+  "allowance": zod.string(),
+  "approvalRequired": zod.boolean(),
+  "simulated": zod.boolean()
+})
+
+
+export const listStockflowTradeHistoryResponseNetworkFeesOneExecutionWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const listStockflowTradeHistoryResponseNetworkFeesOneL1DataWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const listStockflowTradeHistoryResponseNetworkFeesOneOperatorWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const listStockflowTradeHistoryResponseNetworkFeesOneTotalWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const listStockflowTradeHistoryResponseReviewedSwapFeeOneExecutionWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const listStockflowTradeHistoryResponseReviewedSwapFeeOneL1DataWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const listStockflowTradeHistoryResponseReviewedSwapFeeOneOperatorWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const listStockflowTradeHistoryResponseReviewedSwapFeeOneTotalWeiRegExp = new RegExp('^[0-9]{1,78}$');
+
+
+export const ListStockflowTradeHistoryResponseItem = zod.object({
+  "hash": zod.string(),
+  "originalHash": zod.string(),
+  "replacementHashes": zod.array(zod.string()),
+  "quoteId": zod.string(),
+  "symbol": zod.string(),
+  "side": zod.enum(['buy', 'sell']),
+  "status": zod.enum(['pending', 'confirmed', 'failed', 'cancelled', 'changed']),
+  "amountIn": zod.string(),
+  "amountOut": zod.string().nullable(),
+  "networkFees": zod.union([zod.object({
+  "executionWei": zod.string().regex(listStockflowTradeHistoryResponseNetworkFeesOneExecutionWeiRegExp).nullable(),
+  "l1DataWei": zod.string().regex(listStockflowTradeHistoryResponseNetworkFeesOneL1DataWeiRegExp).nullable(),
+  "operatorWei": zod.string().regex(listStockflowTradeHistoryResponseNetworkFeesOneOperatorWeiRegExp).nullable(),
+  "totalWei": zod.string().regex(listStockflowTradeHistoryResponseNetworkFeesOneTotalWeiRegExp).nullable()
+}).describe('Network cost in decimal wei strings. Null means unavailable, never zero. Excludes pool and service fees.'),zod.null()]).optional(),
+  "reviewedSwapFee": zod.union([zod.object({
+  "executionWei": zod.string().regex(listStockflowTradeHistoryResponseReviewedSwapFeeOneExecutionWeiRegExp).nullable(),
+  "l1DataWei": zod.string().regex(listStockflowTradeHistoryResponseReviewedSwapFeeOneL1DataWeiRegExp).nullable(),
+  "operatorWei": zod.string().regex(listStockflowTradeHistoryResponseReviewedSwapFeeOneOperatorWeiRegExp).nullable(),
+  "totalWei": zod.string().regex(listStockflowTradeHistoryResponseReviewedSwapFeeOneTotalWeiRegExp).nullable()
+}).describe('Network cost in decimal wei strings. Null means unavailable, never zero. Excludes pool and service fees.'),zod.null()]).optional(),
+  "decimalsIn": zod.number(),
+  "decimalsOut": zod.number(),
+  "createdAt": zod.string()
+})
+export const ListStockflowTradeHistoryResponse = zod.array(ListStockflowTradeHistoryResponseItem)
+
+
+export const recordStockflowTradeBodyHashRegExp = new RegExp('^0x[a-fA-F0-9]{64}$');
+export const recordStockflowTradeBodyReplacementHashesItemRegExp = new RegExp('^0x[a-fA-F0-9]{64}$');
+export const recordStockflowTradeBodyReplacementHashesMax = 20;
+
+export const recordStockflowTradeBodyReviewedSwapFeeOneExecutionWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const recordStockflowTradeBodyReviewedSwapFeeOneL1DataWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const recordStockflowTradeBodyReviewedSwapFeeOneOperatorWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const recordStockflowTradeBodyReviewedSwapFeeOneTotalWeiRegExp = new RegExp('^[0-9]{1,78}$');
+
+
+export const RecordStockflowTradeBody = zod.object({
+  "quoteId": zod.string(),
+  "hash": zod.string().regex(recordStockflowTradeBodyHashRegExp),
+  "replacementHashes": zod.array(zod.string().regex(recordStockflowTradeBodyReplacementHashesItemRegExp)).max(recordStockflowTradeBodyReplacementHashesMax).optional(),
+  "reviewedSwapFee": zod.union([zod.object({
+  "executionWei": zod.string().regex(recordStockflowTradeBodyReviewedSwapFeeOneExecutionWeiRegExp).nullable(),
+  "l1DataWei": zod.string().regex(recordStockflowTradeBodyReviewedSwapFeeOneL1DataWeiRegExp).nullable(),
+  "operatorWei": zod.string().regex(recordStockflowTradeBodyReviewedSwapFeeOneOperatorWeiRegExp).nullable(),
+  "totalWei": zod.string().regex(recordStockflowTradeBodyReviewedSwapFeeOneTotalWeiRegExp).nullable()
+}).describe('Network cost in decimal wei strings. Null means unavailable, never zero. Excludes pool and service fees.'),zod.null()]).optional().describe('Client-reported estimate reviewed before signing, not an authoritative paid fee.')
+})
+
+export const recordStockflowTradeResponseNetworkFeesOneExecutionWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const recordStockflowTradeResponseNetworkFeesOneL1DataWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const recordStockflowTradeResponseNetworkFeesOneOperatorWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const recordStockflowTradeResponseNetworkFeesOneTotalWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const recordStockflowTradeResponseReviewedSwapFeeOneExecutionWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const recordStockflowTradeResponseReviewedSwapFeeOneL1DataWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const recordStockflowTradeResponseReviewedSwapFeeOneOperatorWeiRegExp = new RegExp('^[0-9]{1,78}$');
+export const recordStockflowTradeResponseReviewedSwapFeeOneTotalWeiRegExp = new RegExp('^[0-9]{1,78}$');
+
+
+export const RecordStockflowTradeResponse = zod.object({
+  "hash": zod.string(),
+  "originalHash": zod.string(),
+  "replacementHashes": zod.array(zod.string()),
+  "quoteId": zod.string(),
+  "symbol": zod.string(),
+  "side": zod.enum(['buy', 'sell']),
+  "status": zod.enum(['pending', 'confirmed', 'failed', 'cancelled', 'changed']),
+  "amountIn": zod.string(),
+  "amountOut": zod.string().nullable(),
+  "networkFees": zod.union([zod.object({
+  "executionWei": zod.string().regex(recordStockflowTradeResponseNetworkFeesOneExecutionWeiRegExp).nullable(),
+  "l1DataWei": zod.string().regex(recordStockflowTradeResponseNetworkFeesOneL1DataWeiRegExp).nullable(),
+  "operatorWei": zod.string().regex(recordStockflowTradeResponseNetworkFeesOneOperatorWeiRegExp).nullable(),
+  "totalWei": zod.string().regex(recordStockflowTradeResponseNetworkFeesOneTotalWeiRegExp).nullable()
+}).describe('Network cost in decimal wei strings. Null means unavailable, never zero. Excludes pool and service fees.'),zod.null()]).optional(),
+  "reviewedSwapFee": zod.union([zod.object({
+  "executionWei": zod.string().regex(recordStockflowTradeResponseReviewedSwapFeeOneExecutionWeiRegExp).nullable(),
+  "l1DataWei": zod.string().regex(recordStockflowTradeResponseReviewedSwapFeeOneL1DataWeiRegExp).nullable(),
+  "operatorWei": zod.string().regex(recordStockflowTradeResponseReviewedSwapFeeOneOperatorWeiRegExp).nullable(),
+  "totalWei": zod.string().regex(recordStockflowTradeResponseReviewedSwapFeeOneTotalWeiRegExp).nullable()
+}).describe('Network cost in decimal wei strings. Null means unavailable, never zero. Excludes pool and service fees.'),zod.null()]).optional(),
+  "decimalsIn": zod.number(),
+  "decimalsOut": zod.number(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Live Coinbase tokenized stock reference catalogue, not trade quotes
+ */
+export const ListStockflowStocksResponse = zod.object({
+  "stocks": zod.array(zod.object({
+  "address": zod.string(),
+  "symbol": zod.string(),
+  "name": zod.string(),
+  "decimals": zod.number(),
+  "multiplier": zod.number().nullable(),
+  "referencePrice": zod.number().nullable(),
+  "priceUpdatedAt": zod.string().nullable(),
+  "iconUrl": zod.string().nullable(),
+  "pausedFeatures": zod.array(zod.string())
+})),
+  "fetchedAt": zod.string(),
+  "source": zod.string(),
+  "chainId": zod.number()
+})
+
+
+/**
+ * @summary Read public Base balances for catalogue stocks
+ */
+export const getStockflowPositionsPathWalletRegExp = new RegExp('^0x[a-fA-F0-9]{40}$');
+
+
+export const GetStockflowPositionsParams = zod.object({
+  "wallet": zod.coerce.string().regex(getStockflowPositionsPathWalletRegExp)
+})
+
+export const GetStockflowPositionsResponse = zod.object({
+  "wallet": zod.string(),
+  "positions": zod.array(zod.object({
+  "address": zod.string(),
+  "rawBalance": zod.string(),
+  "tokenBalance": zod.string(),
+  "shareBalance": zod.string().nullable(),
+  "referenceValue": zod.number().nullable()
+})),
+  "failedReads": zod.number(),
+  "fetchedAt": zod.string(),
+  "blockNumber": zod.string()
+})
+
+
+export const getStockflowIncomePathWalletRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+
+
+export const GetStockflowIncomeParams = zod.object({
+  "wallet": zod.coerce.string().regex(getStockflowIncomePathWalletRegExp)
+})
+
+export const getStockflowIncomeQuerySignatureMax = 4096;
+
+
+export const getStockflowIncomeQuerySignatureRegExp = new RegExp('^0x[0-9a-fA-F]+$');
+
+
+export const GetStockflowIncomeQueryParams = zod.object({
+  "signature": zod.coerce.string().max(getStockflowIncomeQuerySignatureMax).regex(getStockflowIncomeQuerySignatureRegExp),
+  "timestamp": zod.coerce.number()
+})
+
+export const getStockflowIncomeResponsePolicyOneIdMax = 100;
+
+export const getStockflowIncomeResponsePolicyOneNameMax = 100;
+
+export const getStockflowIncomeResponsePolicyOneIncomePctExclusiveMin = 0;
+export const getStockflowIncomeResponsePolicyOneIncomePctMax = 100;
+
+export const getStockflowIncomeResponsePolicyOneMaxPerPurchaseExclusiveMin = 0;
+export const getStockflowIncomeResponsePolicyOneMaxPerPurchaseMax = 1000000000;
+
+export const getStockflowIncomeResponsePolicyOneDailyMaxExclusiveMin = 0;
+export const getStockflowIncomeResponsePolicyOneDailyMaxMax = 1000000000;
+
+export const getStockflowIncomeResponsePolicyOneAllocationsItemAddressRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+export const getStockflowIncomeResponsePolicyOneAllocationsItemSymbolMax = 30;
+
+export const getStockflowIncomeResponsePolicyOneAllocationsItemWeightExclusiveMin = 0;
+export const getStockflowIncomeResponsePolicyOneAllocationsItemWeightMax = 100;
+
+export const getStockflowIncomeResponsePolicyOneAllocationsMax = 50;
+
+export const getStockflowIncomeResponseReceiptsItemAmountAtomicRegExp = new RegExp('^[0-9]+$');
+export const getStockflowIncomeResponseProposalsItemPolicyIdMax = 100;
+
+export const getStockflowIncomeResponseProposalsItemPolicyNameMax = 100;
+
+export const getStockflowIncomeResponseProposalsItemPolicyIncomePctExclusiveMin = 0;
+export const getStockflowIncomeResponseProposalsItemPolicyIncomePctMax = 100;
+
+export const getStockflowIncomeResponseProposalsItemPolicyMaxPerPurchaseExclusiveMin = 0;
+export const getStockflowIncomeResponseProposalsItemPolicyMaxPerPurchaseMax = 1000000000;
+
+export const getStockflowIncomeResponseProposalsItemPolicyDailyMaxExclusiveMin = 0;
+export const getStockflowIncomeResponseProposalsItemPolicyDailyMaxMax = 1000000000;
+
+export const getStockflowIncomeResponseProposalsItemPolicyAllocationsItemAddressRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+export const getStockflowIncomeResponseProposalsItemPolicyAllocationsItemSymbolMax = 30;
+
+export const getStockflowIncomeResponseProposalsItemPolicyAllocationsItemWeightExclusiveMin = 0;
+export const getStockflowIncomeResponseProposalsItemPolicyAllocationsItemWeightMax = 100;
+
+export const getStockflowIncomeResponseProposalsItemPolicyAllocationsMax = 50;
+
+
+
+export const GetStockflowIncomeResponse = zod.object({
+  "wallet": zod.string(),
+  "chainId": zod.number(),
+  "requiredConfirmations": zod.number(),
+  "policy": zod.union([zod.object({
+  "id": zod.string().min(1).max(getStockflowIncomeResponsePolicyOneIdMax),
+  "name": zod.string().min(1).max(getStockflowIncomeResponsePolicyOneNameMax),
+  "incomePct": zod.number().gt(getStockflowIncomeResponsePolicyOneIncomePctExclusiveMin).max(getStockflowIncomeResponsePolicyOneIncomePctMax),
+  "maxPerPurchase": zod.number().gt(getStockflowIncomeResponsePolicyOneMaxPerPurchaseExclusiveMin).max(getStockflowIncomeResponsePolicyOneMaxPerPurchaseMax),
+  "dailyMax": zod.number().gt(getStockflowIncomeResponsePolicyOneDailyMaxExclusiveMin).max(getStockflowIncomeResponsePolicyOneDailyMaxMax),
+  "expiresAt": zod.number(),
+  "status": zod.enum(['active', 'revoked']),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "allocations": zod.array(zod.object({
+  "address": zod.string().regex(getStockflowIncomeResponsePolicyOneAllocationsItemAddressRegExp),
+  "symbol": zod.string().min(1).max(getStockflowIncomeResponsePolicyOneAllocationsItemSymbolMax),
+  "weight": zod.number().gt(getStockflowIncomeResponsePolicyOneAllocationsItemWeightExclusiveMin).max(getStockflowIncomeResponsePolicyOneAllocationsItemWeightMax)
+})).min(1).max(getStockflowIncomeResponsePolicyOneAllocationsMax)
+}),zod.null()]),
+  "receipts": zod.array(zod.object({
+  "id": zod.string(),
+  "txHash": zod.string(),
+  "logIndex": zod.number(),
+  "receiptIndex": zod.number().describe('Stable transaction-local log offset used for identity across reorgs.'),
+  "token": zod.enum(['USDC', 'EURC']),
+  "tokenAddress": zod.string(),
+  "amountAtomic": zod.string().regex(getStockflowIncomeResponseReceiptsItemAmountAtomicRegExp),
+  "sender": zod.string(),
+  "blockNumber": zod.string(),
+  "blockHash": zod.string(),
+  "receivedAt": zod.string(),
+  "confirmations": zod.number(),
+  "status": zod.enum(['confirming', 'confirmed', 'orphaned']),
+  "paymentRequestIds": zod.array(zod.string())
+})),
+  "proposals": zod.array(zod.object({
+  "id": zod.string(),
+  "receiptId": zod.string(),
+  "policy": zod.object({
+  "id": zod.string().min(1).max(getStockflowIncomeResponseProposalsItemPolicyIdMax),
+  "name": zod.string().min(1).max(getStockflowIncomeResponseProposalsItemPolicyNameMax),
+  "incomePct": zod.number().gt(getStockflowIncomeResponseProposalsItemPolicyIncomePctExclusiveMin).max(getStockflowIncomeResponseProposalsItemPolicyIncomePctMax),
+  "maxPerPurchase": zod.number().gt(getStockflowIncomeResponseProposalsItemPolicyMaxPerPurchaseExclusiveMin).max(getStockflowIncomeResponseProposalsItemPolicyMaxPerPurchaseMax),
+  "dailyMax": zod.number().gt(getStockflowIncomeResponseProposalsItemPolicyDailyMaxExclusiveMin).max(getStockflowIncomeResponseProposalsItemPolicyDailyMaxMax),
+  "expiresAt": zod.number(),
+  "status": zod.enum(['active', 'revoked']),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "allocations": zod.array(zod.object({
+  "address": zod.string().regex(getStockflowIncomeResponseProposalsItemPolicyAllocationsItemAddressRegExp),
+  "symbol": zod.string().min(1).max(getStockflowIncomeResponseProposalsItemPolicyAllocationsItemSymbolMax),
+  "weight": zod.number().gt(getStockflowIncomeResponseProposalsItemPolicyAllocationsItemWeightExclusiveMin).max(getStockflowIncomeResponseProposalsItemPolicyAllocationsItemWeightMax)
+})).min(1).max(getStockflowIncomeResponseProposalsItemPolicyAllocationsMax)
+}),
+  "totalUsd": zod.string(),
+  "lines": zod.array(zod.object({
+  "address": zod.string(),
+  "symbol": zod.string(),
+  "amountUsd": zod.string()
+})),
+  "status": zod.enum(['pending_review', 'reviewed', 'dismissed', 'invalidated', 'blocked']),
+  "reason": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "reviewedAt": zod.string().nullable()
+})),
+  "scanStartBlock": zod.string().nullable(),
+  "scannedThroughBlock": zod.string().nullable(),
+  "scannedBlockHash": zod.string().nullable(),
+  "headBlock": zod.string().nullable(),
+  "syncedAt": zod.string().nullable()
+})
+
+
+export const setStockflowIncomePolicyPathWalletRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+
+
+export const SetStockflowIncomePolicyParams = zod.object({
+  "wallet": zod.coerce.string().regex(setStockflowIncomePolicyPathWalletRegExp)
+})
+
+export const setStockflowIncomePolicyBodyPolicyOneIdMax = 100;
+
+export const setStockflowIncomePolicyBodyPolicyOneNameMax = 100;
+
+export const setStockflowIncomePolicyBodyPolicyOneIncomePctExclusiveMin = 0;
+export const setStockflowIncomePolicyBodyPolicyOneIncomePctMax = 100;
+
+export const setStockflowIncomePolicyBodyPolicyOneMaxPerPurchaseExclusiveMin = 0;
+export const setStockflowIncomePolicyBodyPolicyOneMaxPerPurchaseMax = 1000000000;
+
+export const setStockflowIncomePolicyBodyPolicyOneDailyMaxExclusiveMin = 0;
+export const setStockflowIncomePolicyBodyPolicyOneDailyMaxMax = 1000000000;
+
+export const setStockflowIncomePolicyBodyPolicyOneAllocationsItemAddressRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+export const setStockflowIncomePolicyBodyPolicyOneAllocationsItemSymbolMax = 30;
+
+export const setStockflowIncomePolicyBodyPolicyOneAllocationsItemWeightExclusiveMin = 0;
+export const setStockflowIncomePolicyBodyPolicyOneAllocationsItemWeightMax = 100;
+
+export const setStockflowIncomePolicyBodyPolicyOneAllocationsMax = 50;
+
+export const setStockflowIncomePolicyBodySignatureMax = 4096;
+
+
+
+export const SetStockflowIncomePolicyBody = zod.object({
+  "policy": zod.union([zod.object({
+  "id": zod.string().min(1).max(setStockflowIncomePolicyBodyPolicyOneIdMax),
+  "name": zod.string().min(1).max(setStockflowIncomePolicyBodyPolicyOneNameMax),
+  "incomePct": zod.number().gt(setStockflowIncomePolicyBodyPolicyOneIncomePctExclusiveMin).max(setStockflowIncomePolicyBodyPolicyOneIncomePctMax),
+  "maxPerPurchase": zod.number().gt(setStockflowIncomePolicyBodyPolicyOneMaxPerPurchaseExclusiveMin).max(setStockflowIncomePolicyBodyPolicyOneMaxPerPurchaseMax),
+  "dailyMax": zod.number().gt(setStockflowIncomePolicyBodyPolicyOneDailyMaxExclusiveMin).max(setStockflowIncomePolicyBodyPolicyOneDailyMaxMax),
+  "expiresAt": zod.number(),
+  "status": zod.enum(['active', 'revoked']),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "allocations": zod.array(zod.object({
+  "address": zod.string().regex(setStockflowIncomePolicyBodyPolicyOneAllocationsItemAddressRegExp),
+  "symbol": zod.string().min(1).max(setStockflowIncomePolicyBodyPolicyOneAllocationsItemSymbolMax),
+  "weight": zod.number().gt(setStockflowIncomePolicyBodyPolicyOneAllocationsItemWeightExclusiveMin).max(setStockflowIncomePolicyBodyPolicyOneAllocationsItemWeightMax)
+})).min(1).max(setStockflowIncomePolicyBodyPolicyOneAllocationsMax)
+}),zod.null()]),
+  "signature": zod.string().max(setStockflowIncomePolicyBodySignatureMax),
+  "timestamp": zod.number()
+})
+
+export const setStockflowIncomePolicyResponsePolicyOneIdMax = 100;
+
+export const setStockflowIncomePolicyResponsePolicyOneNameMax = 100;
+
+export const setStockflowIncomePolicyResponsePolicyOneIncomePctExclusiveMin = 0;
+export const setStockflowIncomePolicyResponsePolicyOneIncomePctMax = 100;
+
+export const setStockflowIncomePolicyResponsePolicyOneMaxPerPurchaseExclusiveMin = 0;
+export const setStockflowIncomePolicyResponsePolicyOneMaxPerPurchaseMax = 1000000000;
+
+export const setStockflowIncomePolicyResponsePolicyOneDailyMaxExclusiveMin = 0;
+export const setStockflowIncomePolicyResponsePolicyOneDailyMaxMax = 1000000000;
+
+export const setStockflowIncomePolicyResponsePolicyOneAllocationsItemAddressRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+export const setStockflowIncomePolicyResponsePolicyOneAllocationsItemSymbolMax = 30;
+
+export const setStockflowIncomePolicyResponsePolicyOneAllocationsItemWeightExclusiveMin = 0;
+export const setStockflowIncomePolicyResponsePolicyOneAllocationsItemWeightMax = 100;
+
+export const setStockflowIncomePolicyResponsePolicyOneAllocationsMax = 50;
+
+export const setStockflowIncomePolicyResponseReceiptsItemAmountAtomicRegExp = new RegExp('^[0-9]+$');
+export const setStockflowIncomePolicyResponseProposalsItemPolicyIdMax = 100;
+
+export const setStockflowIncomePolicyResponseProposalsItemPolicyNameMax = 100;
+
+export const setStockflowIncomePolicyResponseProposalsItemPolicyIncomePctExclusiveMin = 0;
+export const setStockflowIncomePolicyResponseProposalsItemPolicyIncomePctMax = 100;
+
+export const setStockflowIncomePolicyResponseProposalsItemPolicyMaxPerPurchaseExclusiveMin = 0;
+export const setStockflowIncomePolicyResponseProposalsItemPolicyMaxPerPurchaseMax = 1000000000;
+
+export const setStockflowIncomePolicyResponseProposalsItemPolicyDailyMaxExclusiveMin = 0;
+export const setStockflowIncomePolicyResponseProposalsItemPolicyDailyMaxMax = 1000000000;
+
+export const setStockflowIncomePolicyResponseProposalsItemPolicyAllocationsItemAddressRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+export const setStockflowIncomePolicyResponseProposalsItemPolicyAllocationsItemSymbolMax = 30;
+
+export const setStockflowIncomePolicyResponseProposalsItemPolicyAllocationsItemWeightExclusiveMin = 0;
+export const setStockflowIncomePolicyResponseProposalsItemPolicyAllocationsItemWeightMax = 100;
+
+export const setStockflowIncomePolicyResponseProposalsItemPolicyAllocationsMax = 50;
+
+
+
+export const SetStockflowIncomePolicyResponse = zod.object({
+  "wallet": zod.string(),
+  "chainId": zod.number(),
+  "requiredConfirmations": zod.number(),
+  "policy": zod.union([zod.object({
+  "id": zod.string().min(1).max(setStockflowIncomePolicyResponsePolicyOneIdMax),
+  "name": zod.string().min(1).max(setStockflowIncomePolicyResponsePolicyOneNameMax),
+  "incomePct": zod.number().gt(setStockflowIncomePolicyResponsePolicyOneIncomePctExclusiveMin).max(setStockflowIncomePolicyResponsePolicyOneIncomePctMax),
+  "maxPerPurchase": zod.number().gt(setStockflowIncomePolicyResponsePolicyOneMaxPerPurchaseExclusiveMin).max(setStockflowIncomePolicyResponsePolicyOneMaxPerPurchaseMax),
+  "dailyMax": zod.number().gt(setStockflowIncomePolicyResponsePolicyOneDailyMaxExclusiveMin).max(setStockflowIncomePolicyResponsePolicyOneDailyMaxMax),
+  "expiresAt": zod.number(),
+  "status": zod.enum(['active', 'revoked']),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "allocations": zod.array(zod.object({
+  "address": zod.string().regex(setStockflowIncomePolicyResponsePolicyOneAllocationsItemAddressRegExp),
+  "symbol": zod.string().min(1).max(setStockflowIncomePolicyResponsePolicyOneAllocationsItemSymbolMax),
+  "weight": zod.number().gt(setStockflowIncomePolicyResponsePolicyOneAllocationsItemWeightExclusiveMin).max(setStockflowIncomePolicyResponsePolicyOneAllocationsItemWeightMax)
+})).min(1).max(setStockflowIncomePolicyResponsePolicyOneAllocationsMax)
+}),zod.null()]),
+  "receipts": zod.array(zod.object({
+  "id": zod.string(),
+  "txHash": zod.string(),
+  "logIndex": zod.number(),
+  "receiptIndex": zod.number().describe('Stable transaction-local log offset used for identity across reorgs.'),
+  "token": zod.enum(['USDC', 'EURC']),
+  "tokenAddress": zod.string(),
+  "amountAtomic": zod.string().regex(setStockflowIncomePolicyResponseReceiptsItemAmountAtomicRegExp),
+  "sender": zod.string(),
+  "blockNumber": zod.string(),
+  "blockHash": zod.string(),
+  "receivedAt": zod.string(),
+  "confirmations": zod.number(),
+  "status": zod.enum(['confirming', 'confirmed', 'orphaned']),
+  "paymentRequestIds": zod.array(zod.string())
+})),
+  "proposals": zod.array(zod.object({
+  "id": zod.string(),
+  "receiptId": zod.string(),
+  "policy": zod.object({
+  "id": zod.string().min(1).max(setStockflowIncomePolicyResponseProposalsItemPolicyIdMax),
+  "name": zod.string().min(1).max(setStockflowIncomePolicyResponseProposalsItemPolicyNameMax),
+  "incomePct": zod.number().gt(setStockflowIncomePolicyResponseProposalsItemPolicyIncomePctExclusiveMin).max(setStockflowIncomePolicyResponseProposalsItemPolicyIncomePctMax),
+  "maxPerPurchase": zod.number().gt(setStockflowIncomePolicyResponseProposalsItemPolicyMaxPerPurchaseExclusiveMin).max(setStockflowIncomePolicyResponseProposalsItemPolicyMaxPerPurchaseMax),
+  "dailyMax": zod.number().gt(setStockflowIncomePolicyResponseProposalsItemPolicyDailyMaxExclusiveMin).max(setStockflowIncomePolicyResponseProposalsItemPolicyDailyMaxMax),
+  "expiresAt": zod.number(),
+  "status": zod.enum(['active', 'revoked']),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "allocations": zod.array(zod.object({
+  "address": zod.string().regex(setStockflowIncomePolicyResponseProposalsItemPolicyAllocationsItemAddressRegExp),
+  "symbol": zod.string().min(1).max(setStockflowIncomePolicyResponseProposalsItemPolicyAllocationsItemSymbolMax),
+  "weight": zod.number().gt(setStockflowIncomePolicyResponseProposalsItemPolicyAllocationsItemWeightExclusiveMin).max(setStockflowIncomePolicyResponseProposalsItemPolicyAllocationsItemWeightMax)
+})).min(1).max(setStockflowIncomePolicyResponseProposalsItemPolicyAllocationsMax)
+}),
+  "totalUsd": zod.string(),
+  "lines": zod.array(zod.object({
+  "address": zod.string(),
+  "symbol": zod.string(),
+  "amountUsd": zod.string()
+})),
+  "status": zod.enum(['pending_review', 'reviewed', 'dismissed', 'invalidated', 'blocked']),
+  "reason": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "reviewedAt": zod.string().nullable()
+})),
+  "scanStartBlock": zod.string().nullable(),
+  "scannedThroughBlock": zod.string().nullable(),
+  "scannedBlockHash": zod.string().nullable(),
+  "headBlock": zod.string().nullable(),
+  "syncedAt": zod.string().nullable()
+})
+
+
+export const syncStockflowIncomePathWalletRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+
+
+export const SyncStockflowIncomeParams = zod.object({
+  "wallet": zod.coerce.string().regex(syncStockflowIncomePathWalletRegExp)
+})
+
+export const syncStockflowIncomeBodySignatureMax = 4096;
+
+export const syncStockflowIncomeBodyTxHashRegExp = new RegExp('^0x[0-9a-fA-F]{64}$');
+
+
+export const SyncStockflowIncomeBody = zod.object({
+  "signature": zod.string().max(syncStockflowIncomeBodySignatureMax),
+  "timestamp": zod.number(),
+  "txHash": zod.string().regex(syncStockflowIncomeBodyTxHashRegExp).optional().describe('Optional historical transaction to verify, outside the automatic scan window.')
+})
+
+export const syncStockflowIncomeResponsePolicyOneIdMax = 100;
+
+export const syncStockflowIncomeResponsePolicyOneNameMax = 100;
+
+export const syncStockflowIncomeResponsePolicyOneIncomePctExclusiveMin = 0;
+export const syncStockflowIncomeResponsePolicyOneIncomePctMax = 100;
+
+export const syncStockflowIncomeResponsePolicyOneMaxPerPurchaseExclusiveMin = 0;
+export const syncStockflowIncomeResponsePolicyOneMaxPerPurchaseMax = 1000000000;
+
+export const syncStockflowIncomeResponsePolicyOneDailyMaxExclusiveMin = 0;
+export const syncStockflowIncomeResponsePolicyOneDailyMaxMax = 1000000000;
+
+export const syncStockflowIncomeResponsePolicyOneAllocationsItemAddressRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+export const syncStockflowIncomeResponsePolicyOneAllocationsItemSymbolMax = 30;
+
+export const syncStockflowIncomeResponsePolicyOneAllocationsItemWeightExclusiveMin = 0;
+export const syncStockflowIncomeResponsePolicyOneAllocationsItemWeightMax = 100;
+
+export const syncStockflowIncomeResponsePolicyOneAllocationsMax = 50;
+
+export const syncStockflowIncomeResponseReceiptsItemAmountAtomicRegExp = new RegExp('^[0-9]+$');
+export const syncStockflowIncomeResponseProposalsItemPolicyIdMax = 100;
+
+export const syncStockflowIncomeResponseProposalsItemPolicyNameMax = 100;
+
+export const syncStockflowIncomeResponseProposalsItemPolicyIncomePctExclusiveMin = 0;
+export const syncStockflowIncomeResponseProposalsItemPolicyIncomePctMax = 100;
+
+export const syncStockflowIncomeResponseProposalsItemPolicyMaxPerPurchaseExclusiveMin = 0;
+export const syncStockflowIncomeResponseProposalsItemPolicyMaxPerPurchaseMax = 1000000000;
+
+export const syncStockflowIncomeResponseProposalsItemPolicyDailyMaxExclusiveMin = 0;
+export const syncStockflowIncomeResponseProposalsItemPolicyDailyMaxMax = 1000000000;
+
+export const syncStockflowIncomeResponseProposalsItemPolicyAllocationsItemAddressRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+export const syncStockflowIncomeResponseProposalsItemPolicyAllocationsItemSymbolMax = 30;
+
+export const syncStockflowIncomeResponseProposalsItemPolicyAllocationsItemWeightExclusiveMin = 0;
+export const syncStockflowIncomeResponseProposalsItemPolicyAllocationsItemWeightMax = 100;
+
+export const syncStockflowIncomeResponseProposalsItemPolicyAllocationsMax = 50;
+
+
+
+export const SyncStockflowIncomeResponse = zod.object({
+  "wallet": zod.string(),
+  "chainId": zod.number(),
+  "requiredConfirmations": zod.number(),
+  "policy": zod.union([zod.object({
+  "id": zod.string().min(1).max(syncStockflowIncomeResponsePolicyOneIdMax),
+  "name": zod.string().min(1).max(syncStockflowIncomeResponsePolicyOneNameMax),
+  "incomePct": zod.number().gt(syncStockflowIncomeResponsePolicyOneIncomePctExclusiveMin).max(syncStockflowIncomeResponsePolicyOneIncomePctMax),
+  "maxPerPurchase": zod.number().gt(syncStockflowIncomeResponsePolicyOneMaxPerPurchaseExclusiveMin).max(syncStockflowIncomeResponsePolicyOneMaxPerPurchaseMax),
+  "dailyMax": zod.number().gt(syncStockflowIncomeResponsePolicyOneDailyMaxExclusiveMin).max(syncStockflowIncomeResponsePolicyOneDailyMaxMax),
+  "expiresAt": zod.number(),
+  "status": zod.enum(['active', 'revoked']),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "allocations": zod.array(zod.object({
+  "address": zod.string().regex(syncStockflowIncomeResponsePolicyOneAllocationsItemAddressRegExp),
+  "symbol": zod.string().min(1).max(syncStockflowIncomeResponsePolicyOneAllocationsItemSymbolMax),
+  "weight": zod.number().gt(syncStockflowIncomeResponsePolicyOneAllocationsItemWeightExclusiveMin).max(syncStockflowIncomeResponsePolicyOneAllocationsItemWeightMax)
+})).min(1).max(syncStockflowIncomeResponsePolicyOneAllocationsMax)
+}),zod.null()]),
+  "receipts": zod.array(zod.object({
+  "id": zod.string(),
+  "txHash": zod.string(),
+  "logIndex": zod.number(),
+  "receiptIndex": zod.number().describe('Stable transaction-local log offset used for identity across reorgs.'),
+  "token": zod.enum(['USDC', 'EURC']),
+  "tokenAddress": zod.string(),
+  "amountAtomic": zod.string().regex(syncStockflowIncomeResponseReceiptsItemAmountAtomicRegExp),
+  "sender": zod.string(),
+  "blockNumber": zod.string(),
+  "blockHash": zod.string(),
+  "receivedAt": zod.string(),
+  "confirmations": zod.number(),
+  "status": zod.enum(['confirming', 'confirmed', 'orphaned']),
+  "paymentRequestIds": zod.array(zod.string())
+})),
+  "proposals": zod.array(zod.object({
+  "id": zod.string(),
+  "receiptId": zod.string(),
+  "policy": zod.object({
+  "id": zod.string().min(1).max(syncStockflowIncomeResponseProposalsItemPolicyIdMax),
+  "name": zod.string().min(1).max(syncStockflowIncomeResponseProposalsItemPolicyNameMax),
+  "incomePct": zod.number().gt(syncStockflowIncomeResponseProposalsItemPolicyIncomePctExclusiveMin).max(syncStockflowIncomeResponseProposalsItemPolicyIncomePctMax),
+  "maxPerPurchase": zod.number().gt(syncStockflowIncomeResponseProposalsItemPolicyMaxPerPurchaseExclusiveMin).max(syncStockflowIncomeResponseProposalsItemPolicyMaxPerPurchaseMax),
+  "dailyMax": zod.number().gt(syncStockflowIncomeResponseProposalsItemPolicyDailyMaxExclusiveMin).max(syncStockflowIncomeResponseProposalsItemPolicyDailyMaxMax),
+  "expiresAt": zod.number(),
+  "status": zod.enum(['active', 'revoked']),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "allocations": zod.array(zod.object({
+  "address": zod.string().regex(syncStockflowIncomeResponseProposalsItemPolicyAllocationsItemAddressRegExp),
+  "symbol": zod.string().min(1).max(syncStockflowIncomeResponseProposalsItemPolicyAllocationsItemSymbolMax),
+  "weight": zod.number().gt(syncStockflowIncomeResponseProposalsItemPolicyAllocationsItemWeightExclusiveMin).max(syncStockflowIncomeResponseProposalsItemPolicyAllocationsItemWeightMax)
+})).min(1).max(syncStockflowIncomeResponseProposalsItemPolicyAllocationsMax)
+}),
+  "totalUsd": zod.string(),
+  "lines": zod.array(zod.object({
+  "address": zod.string(),
+  "symbol": zod.string(),
+  "amountUsd": zod.string()
+})),
+  "status": zod.enum(['pending_review', 'reviewed', 'dismissed', 'invalidated', 'blocked']),
+  "reason": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "reviewedAt": zod.string().nullable()
+})),
+  "scanStartBlock": zod.string().nullable(),
+  "scannedThroughBlock": zod.string().nullable(),
+  "scannedBlockHash": zod.string().nullable(),
+  "headBlock": zod.string().nullable(),
+  "syncedAt": zod.string().nullable()
+})
+
+
+export const reviewStockflowProposalPathWalletRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+export const reviewStockflowProposalPathIdMax = 250;
+
+
+
+export const ReviewStockflowProposalParams = zod.object({
+  "wallet": zod.coerce.string().regex(reviewStockflowProposalPathWalletRegExp),
+  "id": zod.coerce.string().min(1).max(reviewStockflowProposalPathIdMax)
+})
+
+export const reviewStockflowProposalBodySignatureMax = 4096;
+
+
+
+export const ReviewStockflowProposalBody = zod.object({
+  "status": zod.enum(['reviewed', 'dismissed']),
+  "signature": zod.string().max(reviewStockflowProposalBodySignatureMax),
+  "timestamp": zod.number()
+})
+
+export const reviewStockflowProposalResponsePolicyOneIdMax = 100;
+
+export const reviewStockflowProposalResponsePolicyOneNameMax = 100;
+
+export const reviewStockflowProposalResponsePolicyOneIncomePctExclusiveMin = 0;
+export const reviewStockflowProposalResponsePolicyOneIncomePctMax = 100;
+
+export const reviewStockflowProposalResponsePolicyOneMaxPerPurchaseExclusiveMin = 0;
+export const reviewStockflowProposalResponsePolicyOneMaxPerPurchaseMax = 1000000000;
+
+export const reviewStockflowProposalResponsePolicyOneDailyMaxExclusiveMin = 0;
+export const reviewStockflowProposalResponsePolicyOneDailyMaxMax = 1000000000;
+
+export const reviewStockflowProposalResponsePolicyOneAllocationsItemAddressRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+export const reviewStockflowProposalResponsePolicyOneAllocationsItemSymbolMax = 30;
+
+export const reviewStockflowProposalResponsePolicyOneAllocationsItemWeightExclusiveMin = 0;
+export const reviewStockflowProposalResponsePolicyOneAllocationsItemWeightMax = 100;
+
+export const reviewStockflowProposalResponsePolicyOneAllocationsMax = 50;
+
+export const reviewStockflowProposalResponseReceiptsItemAmountAtomicRegExp = new RegExp('^[0-9]+$');
+export const reviewStockflowProposalResponseProposalsItemPolicyIdMax = 100;
+
+export const reviewStockflowProposalResponseProposalsItemPolicyNameMax = 100;
+
+export const reviewStockflowProposalResponseProposalsItemPolicyIncomePctExclusiveMin = 0;
+export const reviewStockflowProposalResponseProposalsItemPolicyIncomePctMax = 100;
+
+export const reviewStockflowProposalResponseProposalsItemPolicyMaxPerPurchaseExclusiveMin = 0;
+export const reviewStockflowProposalResponseProposalsItemPolicyMaxPerPurchaseMax = 1000000000;
+
+export const reviewStockflowProposalResponseProposalsItemPolicyDailyMaxExclusiveMin = 0;
+export const reviewStockflowProposalResponseProposalsItemPolicyDailyMaxMax = 1000000000;
+
+export const reviewStockflowProposalResponseProposalsItemPolicyAllocationsItemAddressRegExp = new RegExp('^0x[0-9a-fA-F]{40}$');
+export const reviewStockflowProposalResponseProposalsItemPolicyAllocationsItemSymbolMax = 30;
+
+export const reviewStockflowProposalResponseProposalsItemPolicyAllocationsItemWeightExclusiveMin = 0;
+export const reviewStockflowProposalResponseProposalsItemPolicyAllocationsItemWeightMax = 100;
+
+export const reviewStockflowProposalResponseProposalsItemPolicyAllocationsMax = 50;
+
+
+
+export const ReviewStockflowProposalResponse = zod.object({
+  "wallet": zod.string(),
+  "chainId": zod.number(),
+  "requiredConfirmations": zod.number(),
+  "policy": zod.union([zod.object({
+  "id": zod.string().min(1).max(reviewStockflowProposalResponsePolicyOneIdMax),
+  "name": zod.string().min(1).max(reviewStockflowProposalResponsePolicyOneNameMax),
+  "incomePct": zod.number().gt(reviewStockflowProposalResponsePolicyOneIncomePctExclusiveMin).max(reviewStockflowProposalResponsePolicyOneIncomePctMax),
+  "maxPerPurchase": zod.number().gt(reviewStockflowProposalResponsePolicyOneMaxPerPurchaseExclusiveMin).max(reviewStockflowProposalResponsePolicyOneMaxPerPurchaseMax),
+  "dailyMax": zod.number().gt(reviewStockflowProposalResponsePolicyOneDailyMaxExclusiveMin).max(reviewStockflowProposalResponsePolicyOneDailyMaxMax),
+  "expiresAt": zod.number(),
+  "status": zod.enum(['active', 'revoked']),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "allocations": zod.array(zod.object({
+  "address": zod.string().regex(reviewStockflowProposalResponsePolicyOneAllocationsItemAddressRegExp),
+  "symbol": zod.string().min(1).max(reviewStockflowProposalResponsePolicyOneAllocationsItemSymbolMax),
+  "weight": zod.number().gt(reviewStockflowProposalResponsePolicyOneAllocationsItemWeightExclusiveMin).max(reviewStockflowProposalResponsePolicyOneAllocationsItemWeightMax)
+})).min(1).max(reviewStockflowProposalResponsePolicyOneAllocationsMax)
+}),zod.null()]),
+  "receipts": zod.array(zod.object({
+  "id": zod.string(),
+  "txHash": zod.string(),
+  "logIndex": zod.number(),
+  "receiptIndex": zod.number().describe('Stable transaction-local log offset used for identity across reorgs.'),
+  "token": zod.enum(['USDC', 'EURC']),
+  "tokenAddress": zod.string(),
+  "amountAtomic": zod.string().regex(reviewStockflowProposalResponseReceiptsItemAmountAtomicRegExp),
+  "sender": zod.string(),
+  "blockNumber": zod.string(),
+  "blockHash": zod.string(),
+  "receivedAt": zod.string(),
+  "confirmations": zod.number(),
+  "status": zod.enum(['confirming', 'confirmed', 'orphaned']),
+  "paymentRequestIds": zod.array(zod.string())
+})),
+  "proposals": zod.array(zod.object({
+  "id": zod.string(),
+  "receiptId": zod.string(),
+  "policy": zod.object({
+  "id": zod.string().min(1).max(reviewStockflowProposalResponseProposalsItemPolicyIdMax),
+  "name": zod.string().min(1).max(reviewStockflowProposalResponseProposalsItemPolicyNameMax),
+  "incomePct": zod.number().gt(reviewStockflowProposalResponseProposalsItemPolicyIncomePctExclusiveMin).max(reviewStockflowProposalResponseProposalsItemPolicyIncomePctMax),
+  "maxPerPurchase": zod.number().gt(reviewStockflowProposalResponseProposalsItemPolicyMaxPerPurchaseExclusiveMin).max(reviewStockflowProposalResponseProposalsItemPolicyMaxPerPurchaseMax),
+  "dailyMax": zod.number().gt(reviewStockflowProposalResponseProposalsItemPolicyDailyMaxExclusiveMin).max(reviewStockflowProposalResponseProposalsItemPolicyDailyMaxMax),
+  "expiresAt": zod.number(),
+  "status": zod.enum(['active', 'revoked']),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "allocations": zod.array(zod.object({
+  "address": zod.string().regex(reviewStockflowProposalResponseProposalsItemPolicyAllocationsItemAddressRegExp),
+  "symbol": zod.string().min(1).max(reviewStockflowProposalResponseProposalsItemPolicyAllocationsItemSymbolMax),
+  "weight": zod.number().gt(reviewStockflowProposalResponseProposalsItemPolicyAllocationsItemWeightExclusiveMin).max(reviewStockflowProposalResponseProposalsItemPolicyAllocationsItemWeightMax)
+})).min(1).max(reviewStockflowProposalResponseProposalsItemPolicyAllocationsMax)
+}),
+  "totalUsd": zod.string(),
+  "lines": zod.array(zod.object({
+  "address": zod.string(),
+  "symbol": zod.string(),
+  "amountUsd": zod.string()
+})),
+  "status": zod.enum(['pending_review', 'reviewed', 'dismissed', 'invalidated', 'blocked']),
+  "reason": zod.string().nullable(),
+  "createdAt": zod.string(),
+  "reviewedAt": zod.string().nullable()
+})),
+  "scanStartBlock": zod.string().nullable(),
+  "scannedThroughBlock": zod.string().nullable(),
+  "scannedBlockHash": zod.string().nullable(),
+  "headBlock": zod.string().nullable(),
+  "syncedAt": zod.string().nullable()
+})
+
+
 /**
  * @summary Health check
  */

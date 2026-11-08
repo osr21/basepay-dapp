@@ -4,10 +4,10 @@
 
 ## Code availability
 
-The paths below describe the StockFlow-enabled pnpm monorepo implementation.
-This documentation update does not upload missing application source into an
-older GitHub checkout. Confirm your checkout includes the listed modules before
-trying to run them; use the current development workspace otherwise.
+The paths below are included in the StockFlow source-code publication.
+Check out the source PR (or a version containing its merge) when using an older
+GitHub checkout. See [source publication and setup](source-publication.md) for
+the review boundary, additive schema changes and verified unfunded checks.
 
 | Area | Implementation location |
 | --- | --- |
@@ -24,6 +24,8 @@ trying to run them; use the current development workspace otherwise.
 ## Setup
 
 1. Install the workspace's Node/pnpm versions and run `pnpm install`.
+   Run `pnpm --filter @workspace/scripts run compile:stockflow` before direct
+   sandbox/Vitest checks. Frontend dev/build/typecheck hooks compile it as needed.
 2. Supply the existing database/session configuration securely and configure
    public pilot administrator addresses. See the [operator guide](operator-guide.md).
 3. Regenerate clients and workspace declarations after API/schema changes:

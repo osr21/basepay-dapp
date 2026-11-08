@@ -20,6 +20,7 @@ import SwapPage from "@/pages/Swap";
 import DeveloperPage from "@/pages/Developer";
 import CrossChainPage from "@/pages/CrossChain";
 import NotFound from "@/pages/NotFound";
+import StockFlowPage from "@/pages/StockFlow";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,6 +50,7 @@ function Router() {
         <Route path="/swap" component={SwapPage} />
         <Route path="/cross-chain" component={CrossChainPage} />
         <Route path="/developer" component={DeveloperPage} />
+        <Route path="/stockflow" component={StockFlowPage} />
         <Route path="/pay/:id" component={PayPage} />
         <Route component={NotFound} />
       </Switch>

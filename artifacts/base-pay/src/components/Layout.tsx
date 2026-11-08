@@ -20,8 +20,12 @@ const NAV = [
   { path: "/contacts",     label: "Contacts",    icon: ContactsIcon     },
   { path: "/app-info",     label: "dApp Info",   icon: ShieldIcon       },
   { path: "/developer",    label: "Developer",   icon: KeyNavIcon       },
+  { path: "/stockflow",    label: "StockFlow",   icon: StockFlowIcon, badge: "PILOT" },
 ];
 
+function StockFlowIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/><path d="M14 8h6v6"/></svg>;
+}
 function HomeIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
 }
@@ -69,7 +73,7 @@ function WrongNetworkBanner() {
   const { switchChain, isPending } = useSwitchChain();
 
   // On the cross-chain page, switching away from Base is intentional
-  if (!isConnected || chainId === base.id || location === "/cross-chain") return null;
+  if (!isConnected || chainId === base.id || location === "/cross-chain" || location === "/stockflow") return null;
 
   return (
     <div className="flex items-center justify-between gap-3 px-4 md:px-8 py-2.5 bg-red-500/10 border-b border-red-500/20 text-sm">

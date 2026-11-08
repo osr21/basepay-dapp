@@ -9,6 +9,9 @@ import swapRouter from "./swap";
 import x402relayRouter from "./x402relay";
 import developerRouter from "./developer";
 import cctpRouter from "./cctp";
+import stockflowRouter from "./stockflow";
+import stockflowPilotRouter from "./stockflow-pilot";
+import stockflowIncomeRouter from "./stockflowIncome";
 
 const router: IRouter = Router();
 
@@ -22,5 +25,8 @@ router.use(swapRouter);
 router.use(x402relayRouter);
 router.use(developerRouter);
 router.use(cctpRouter);
+router.use(stockflowRouter);
+router.use(stockflowPilotRouter);
+router.use(stockflowIncomeRouter);
 
 export default router;

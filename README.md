@@ -2,9 +2,25 @@
 
   Open-source USDC payment infrastructure on **Base Mainnet**. Four verified smart contracts, a gasless transfer relayer, and a full React dApp — all permissionless and free to fork or integrate.
 
-  **Live:** [basepay.replit.app](https://basepay.replit.app) · **Chain:** Base Mainnet (chainId 8453) · **Tokens:** USDC · EURC
+  **Live:** [base-pay.replit.app](https://base-pay.replit.app) · **Chain:** Base Mainnet (chainId 8453) · **Tokens:** USDC · EURC
 
   ---
+
+<!-- stockflow-documentation:start -->
+## BasePay StockFlow
+
+StockFlow combines an allocation planner, received-payment proposals, an
+operator-approved Base Mainnet stock-trading pilot and a separate Sepolia sandbox.
+The Mainnet pilot supports manually confirmed USDC buys and stock-token sales
+through existing Aerodrome contracts; it is not unattended investing or an
+unrestricted stock brokerage.
+
+**[StockFlow documentation](docs/stockflow/README.md)** ·
+[User guide](docs/stockflow/user-guide.md) ·
+[Operator setup](docs/stockflow/operator-guide.md) ·
+[API reference](docs/stockflow/api-reference.md) ·
+[Verified Mainnet test](docs/stockflow/mainnet-test-2026-11-08.md)
+<!-- stockflow-documentation:end -->
 
   ## Features
 

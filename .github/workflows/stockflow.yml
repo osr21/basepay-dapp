@@ -1,0 +1,60 @@
+name: StockFlow source checks
+
+# No path filter: documentation-only PRs get the same stable check, and changes
+# to shared libraries/dependencies cannot bypass it.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stockflow-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stockflow:
+    name: StockFlow publication checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: stockflow_ci
+          POSTGRES_PASSWORD: stockflow_ci
+          POSTGRES_DB: stockflow_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stockflow_ci -d stockflow_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify CI isolation safeguards
+        run: pnpm run ci:stockflow -- safety
+      - name: Check OpenAPI generated-source drift
+        run: pnpm run ci:stockflow -- generated
+      - name: Typecheck libraries, API and BasePay only
+        run: pnpm run ci:stockflow -- types
+      - name: Run StockFlow frontend and local sandbox tests
+        run: pnpm run ci:stockflow -- local
+      - name: Initialize disposable schema and run database suites
+        run: pnpm run ci:stockflow -- database

@@ -144,6 +144,66 @@ publication does not change their versions or replace wallet integrations.
 The full workspace typecheck is not claimed here; the targeted library, API and
 frontend checks above are the verified publication scope.
 
+## Automatic source checks
+
+`.github/workflows/stockflow.yml` runs **StockFlow publication checks** on every
+pull request, pushes to `main`, and manual dispatch. There is no path filter, so
+shared dependency changes and documentation-only PRs receive the same check.
+It uses Node 24, pnpm 10.26.1 and `pnpm install --frozen-lockfile`.
+
+The job runs `pnpm ci:stockflow` in these separately reported phases:
+
+- `safety`: checks that the runner strips inherited credentials, rejects
+  non-disposable database targets, and blocks external network/live modes.
+- `generated`: regenerates the OpenAPI client and Zod sources, then fails on any
+  modified, deleted or untracked generated file. Run codegen and commit all
+  output when changing `lib/api-spec/openapi.yaml`.
+- `types`: checks only the root composite libraries, API server and BasePay;
+  compiles the local sandbox artifact before checking the frontend.
+- `local`: runs only StockFlow frontend tests and the in-process Ganache sandbox,
+  including rejection on a locally simulated Mainnet chain.
+- `database`: pushes the PR's Drizzle schema to a fresh PostgreSQL 16 service and
+  runs income, paid-fee, pilot-access and replacement/recovery suites.
+
+The database service is disposable and contains only synthetic fixtures. No
+repository/environment secrets, relayer or administrator keys, funded accounts,
+external API server, `--live`, `--http`, production database or deployment is
+needed. Synthetic wallet identities sign only local authentication messages.
+All chain reads use mocks; a Node preload rejects non-loopback fetch, HTTP(S)
+and TCP access in check subprocesses, including test workers. This is an
+accidental-regression guard, not a security sandbox for malicious PR code.
+The workflow uses a read-only token and does not retain checkout credentials.
+
+To reproduce locally, provision an **empty, disposable** loopback PostgreSQL
+database named `stockflow_ci`, with user/password `stockflow_ci`, then run:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm ci:stockflow
+# Or just one phase:
+pnpm ci:stockflow -- local
+```
+
+The default target is port 5432. For a separate local cluster, set the non-secret
+`STOCKFLOW_CI_DATABASE_URL` to
+`postgresql://stockflow_ci:stockflow_ci@127.0.0.1:55432/stockflow_ci`.
+Only a loopback target with that synthetic database/user/password is accepted;
+URL query overrides are forbidden. The runner deliberately ignores a configured
+`DATABASE_URL`, `SESSION_SECRET`, signing credentials and `NODE_OPTIONS`.
+Never point it at an application database: the database phase creates schema and
+writes test rows. GitHub removes the service when the job ends.
+
+These checks do not restore the unrelated full-workspace typecheck and never
+invoke the root `test`, application startup tests or signing/deployment scripts.
+To require a green check before merging, an operator can select **StockFlow
+publication checks** in GitHub branch protection; this workflow does not change
+repository protection settings.
+
+The CI runner was also checked against temporary regressions in an isolated
+copy: a library type error, a one-wei fee miscalculation, an eligibility bypass
+and an OpenAPI description change without committed regeneration each produced
+a nonzero exit. Those probes were removed; they are not part of the source.
+
 No funded test, `--live`/`--http` test mode, public-chain write, application
 deployment, contract deployment or production migration was run. The previously
 documented Mainnet trade remains historical evidence, not a test rerun.

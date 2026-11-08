@@ -11,7 +11,7 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:stockflow": "pnpm --filter @workspace/scripts run compile:stockflow && vitest run --config vitest.config.ts"
+    "test:stockflow": "pnpm --filter @workspace/scripts run compile:stockflow && vitest run --config vitest.config.ts test/stockflow"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -22,22 +22,43 @@ import type {
 import type {
   AppConfig,
   AppRegisterInput,
+  AuthenticateStockflowPilotBody,
   Contact,
   ContactInput,
+  CreateStockflowPilotChallenge200,
+  CreateStockflowPilotChallengeBody,
+  CreateStockflowTradeQuoteBody,
   DeleteContactParams,
   DeleteResult,
   ErrorResponse,
   GaslessFeeInfo,
   GaslessTransferInput,
   GaslessTransferResult,
+  GetStockflowIncomeParams,
   GetSwapQuoteParams,
   HealthStatus,
   ListContactsParams,
   ListPaymentRequestsParams,
+  LogoutStockflowPilot200,
   PaymentRequest,
   PaymentRequestInput,
   PaymentRequestUpdate,
   PaymentStats,
+  PrepareStockflowTrade200,
+  PrepareStockflowTradeBody,
+  SaveStockflowPilotParticipantBody,
+  StockflowCatalogue,
+  StockflowErrorResponse,
+  StockflowIncome,
+  StockflowIncomePolicyInput,
+  StockflowIncomeSyncInput,
+  StockflowPilotParticipant,
+  StockflowPilotSession,
+  StockflowPositions,
+  StockflowProposalReviewInput,
+  StockflowTradeQuote,
+  StockflowTradeRecord,
+  StockflowTradeSubmission,
   SwapInput,
   SwapQuoteResult,
   SwapResult
@@ -54,6 +75,1110 @@ type AwaitedInput<T> = PromiseLike<T> | T;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
+
+export const getGetStockflowPilotSessionUrl = () => {
+
+
+
+
+  return `/api/stockflow/pilot/session`
+}
+
+export const getStockflowPilotSession = async ( options?: RequestInit): Promise<StockflowPilotSession> => {
+
+  return customFetch<StockflowPilotSession>(getGetStockflowPilotSessionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStockflowPilotSessionQueryKey = () => {
+    return [
+    `/api/stockflow/pilot/session`
+    ] as const;
+    }
+
+
+export const getGetStockflowPilotSessionQueryOptions = <TData = Awaited<ReturnType<typeof getStockflowPilotSession>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockflowPilotSession>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStockflowPilotSessionQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStockflowPilotSession>>> = ({ signal }) => getStockflowPilotSession({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStockflowPilotSession>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStockflowPilotSessionQueryResult = NonNullable<Awaited<ReturnType<typeof getStockflowPilotSession>>>
+export type GetStockflowPilotSessionQueryError = ErrorType<unknown>
+
+
+
+export function useGetStockflowPilotSession<TData = Awaited<ReturnType<typeof getStockflowPilotSession>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockflowPilotSession>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStockflowPilotSessionQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateStockflowPilotChallengeUrl = () => {
+
+
+
+
+  return `/api/stockflow/pilot/challenge`
+}
+
+export const createStockflowPilotChallenge = async (createStockflowPilotChallengeBody: CreateStockflowPilotChallengeBody, options?: RequestInit): Promise<CreateStockflowPilotChallenge200> => {
+
+  return customFetch<CreateStockflowPilotChallenge200>(getCreateStockflowPilotChallengeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createStockflowPilotChallengeBody,)
+  }
+);}
+
+
+
+
+export const getCreateStockflowPilotChallengeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStockflowPilotChallenge>>, TError,{data: BodyType<CreateStockflowPilotChallengeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createStockflowPilotChallenge>>, TError,{data: BodyType<CreateStockflowPilotChallengeBody>}, TContext> => {
+
+const mutationKey = ['createStockflowPilotChallenge'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createStockflowPilotChallenge>>, {data: BodyType<CreateStockflowPilotChallengeBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createStockflowPilotChallenge(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateStockflowPilotChallengeMutationResult = NonNullable<Awaited<ReturnType<typeof createStockflowPilotChallenge>>>
+    export type CreateStockflowPilotChallengeMutationBody = BodyType<CreateStockflowPilotChallengeBody>
+    export type CreateStockflowPilotChallengeMutationError = ErrorType<unknown>
+
+    export const useCreateStockflowPilotChallenge = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStockflowPilotChallenge>>, TError,{data: BodyType<CreateStockflowPilotChallengeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createStockflowPilotChallenge>>,
+        TError,
+        {data: BodyType<CreateStockflowPilotChallengeBody>},
+        TContext
+      > => {
+      return useMutation(getCreateStockflowPilotChallengeMutationOptions(options));
+    }
+
+export const getAuthenticateStockflowPilotUrl = () => {
+
+
+
+
+  return `/api/stockflow/pilot/auth`
+}
+
+export const authenticateStockflowPilot = async (authenticateStockflowPilotBody: AuthenticateStockflowPilotBody, options?: RequestInit): Promise<StockflowPilotSession> => {
+
+  return customFetch<StockflowPilotSession>(getAuthenticateStockflowPilotUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      authenticateStockflowPilotBody,)
+  }
+);}
+
+
+
+
+export const getAuthenticateStockflowPilotMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authenticateStockflowPilot>>, TError,{data: BodyType<AuthenticateStockflowPilotBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authenticateStockflowPilot>>, TError,{data: BodyType<AuthenticateStockflowPilotBody>}, TContext> => {
+
+const mutationKey = ['authenticateStockflowPilot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authenticateStockflowPilot>>, {data: BodyType<AuthenticateStockflowPilotBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  authenticateStockflowPilot(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthenticateStockflowPilotMutationResult = NonNullable<Awaited<ReturnType<typeof authenticateStockflowPilot>>>
+    export type AuthenticateStockflowPilotMutationBody = BodyType<AuthenticateStockflowPilotBody>
+    export type AuthenticateStockflowPilotMutationError = ErrorType<unknown>
+
+    export const useAuthenticateStockflowPilot = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authenticateStockflowPilot>>, TError,{data: BodyType<AuthenticateStockflowPilotBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof authenticateStockflowPilot>>,
+        TError,
+        {data: BodyType<AuthenticateStockflowPilotBody>},
+        TContext
+      > => {
+      return useMutation(getAuthenticateStockflowPilotMutationOptions(options));
+    }
+
+export const getLogoutStockflowPilotUrl = () => {
+
+
+
+
+  return `/api/stockflow/pilot/logout`
+}
+
+export const logoutStockflowPilot = async ( options?: RequestInit): Promise<LogoutStockflowPilot200> => {
+
+  return customFetch<LogoutStockflowPilot200>(getLogoutStockflowPilotUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getLogoutStockflowPilotMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logoutStockflowPilot>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof logoutStockflowPilot>>, TError,void, TContext> => {
+
+const mutationKey = ['logoutStockflowPilot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logoutStockflowPilot>>, void> = () => {
+
+
+          return  logoutStockflowPilot(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LogoutStockflowPilotMutationResult = NonNullable<Awaited<ReturnType<typeof logoutStockflowPilot>>>
+
+    export type LogoutStockflowPilotMutationError = ErrorType<unknown>
+
+    export const useLogoutStockflowPilot = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logoutStockflowPilot>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof logoutStockflowPilot>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getLogoutStockflowPilotMutationOptions(options));
+    }
+
+export const getListStockflowPilotParticipantsUrl = () => {
+
+
+
+
+  return `/api/stockflow/pilot/participants`
+}
+
+export const listStockflowPilotParticipants = async ( options?: RequestInit): Promise<StockflowPilotParticipant[]> => {
+
+  return customFetch<StockflowPilotParticipant[]>(getListStockflowPilotParticipantsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStockflowPilotParticipantsQueryKey = () => {
+    return [
+    `/api/stockflow/pilot/participants`
+    ] as const;
+    }
+
+
+export const getListStockflowPilotParticipantsQueryOptions = <TData = Awaited<ReturnType<typeof listStockflowPilotParticipants>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockflowPilotParticipants>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStockflowPilotParticipantsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStockflowPilotParticipants>>> = ({ signal }) => listStockflowPilotParticipants({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStockflowPilotParticipants>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStockflowPilotParticipantsQueryResult = NonNullable<Awaited<ReturnType<typeof listStockflowPilotParticipants>>>
+export type ListStockflowPilotParticipantsQueryError = ErrorType<unknown>
+
+
+
+export function useListStockflowPilotParticipants<TData = Awaited<ReturnType<typeof listStockflowPilotParticipants>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockflowPilotParticipants>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStockflowPilotParticipantsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSaveStockflowPilotParticipantUrl = () => {
+
+
+
+
+  return `/api/stockflow/pilot/participants`
+}
+
+export const saveStockflowPilotParticipant = async (saveStockflowPilotParticipantBody: SaveStockflowPilotParticipantBody, options?: RequestInit): Promise<StockflowPilotParticipant> => {
+
+  return customFetch<StockflowPilotParticipant>(getSaveStockflowPilotParticipantUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      saveStockflowPilotParticipantBody,)
+  }
+);}
+
+
+
+
+export const getSaveStockflowPilotParticipantMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveStockflowPilotParticipant>>, TError,{data: BodyType<SaveStockflowPilotParticipantBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveStockflowPilotParticipant>>, TError,{data: BodyType<SaveStockflowPilotParticipantBody>}, TContext> => {
+
+const mutationKey = ['saveStockflowPilotParticipant'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveStockflowPilotParticipant>>, {data: BodyType<SaveStockflowPilotParticipantBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveStockflowPilotParticipant(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveStockflowPilotParticipantMutationResult = NonNullable<Awaited<ReturnType<typeof saveStockflowPilotParticipant>>>
+    export type SaveStockflowPilotParticipantMutationBody = BodyType<SaveStockflowPilotParticipantBody>
+    export type SaveStockflowPilotParticipantMutationError = ErrorType<unknown>
+
+    export const useSaveStockflowPilotParticipant = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveStockflowPilotParticipant>>, TError,{data: BodyType<SaveStockflowPilotParticipantBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveStockflowPilotParticipant>>,
+        TError,
+        {data: BodyType<SaveStockflowPilotParticipantBody>},
+        TContext
+      > => {
+      return useMutation(getSaveStockflowPilotParticipantMutationOptions(options));
+    }
+
+export const getCreateStockflowTradeQuoteUrl = () => {
+
+
+
+
+  return `/api/stockflow/trading/quote`
+}
+
+export const createStockflowTradeQuote = async (createStockflowTradeQuoteBody: CreateStockflowTradeQuoteBody, options?: RequestInit): Promise<StockflowTradeQuote> => {
+
+  return customFetch<StockflowTradeQuote>(getCreateStockflowTradeQuoteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createStockflowTradeQuoteBody,)
+  }
+);}
+
+
+
+
+export const getCreateStockflowTradeQuoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStockflowTradeQuote>>, TError,{data: BodyType<CreateStockflowTradeQuoteBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createStockflowTradeQuote>>, TError,{data: BodyType<CreateStockflowTradeQuoteBody>}, TContext> => {
+
+const mutationKey = ['createStockflowTradeQuote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createStockflowTradeQuote>>, {data: BodyType<CreateStockflowTradeQuoteBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createStockflowTradeQuote(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateStockflowTradeQuoteMutationResult = NonNullable<Awaited<ReturnType<typeof createStockflowTradeQuote>>>
+    export type CreateStockflowTradeQuoteMutationBody = BodyType<CreateStockflowTradeQuoteBody>
+    export type CreateStockflowTradeQuoteMutationError = ErrorType<unknown>
+
+    export const useCreateStockflowTradeQuote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStockflowTradeQuote>>, TError,{data: BodyType<CreateStockflowTradeQuoteBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createStockflowTradeQuote>>,
+        TError,
+        {data: BodyType<CreateStockflowTradeQuoteBody>},
+        TContext
+      > => {
+      return useMutation(getCreateStockflowTradeQuoteMutationOptions(options));
+    }
+
+export const getPrepareStockflowTradeUrl = () => {
+
+
+
+
+  return `/api/stockflow/trading/prepare`
+}
+
+export const prepareStockflowTrade = async (prepareStockflowTradeBody: PrepareStockflowTradeBody, options?: RequestInit): Promise<PrepareStockflowTrade200> => {
+
+  return customFetch<PrepareStockflowTrade200>(getPrepareStockflowTradeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      prepareStockflowTradeBody,)
+  }
+);}
+
+
+
+
+export const getPrepareStockflowTradeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof prepareStockflowTrade>>, TError,{data: BodyType<PrepareStockflowTradeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof prepareStockflowTrade>>, TError,{data: BodyType<PrepareStockflowTradeBody>}, TContext> => {
+
+const mutationKey = ['prepareStockflowTrade'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof prepareStockflowTrade>>, {data: BodyType<PrepareStockflowTradeBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  prepareStockflowTrade(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PrepareStockflowTradeMutationResult = NonNullable<Awaited<ReturnType<typeof prepareStockflowTrade>>>
+    export type PrepareStockflowTradeMutationBody = BodyType<PrepareStockflowTradeBody>
+    export type PrepareStockflowTradeMutationError = ErrorType<unknown>
+
+    export const usePrepareStockflowTrade = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof prepareStockflowTrade>>, TError,{data: BodyType<PrepareStockflowTradeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof prepareStockflowTrade>>,
+        TError,
+        {data: BodyType<PrepareStockflowTradeBody>},
+        TContext
+      > => {
+      return useMutation(getPrepareStockflowTradeMutationOptions(options));
+    }
+
+export const getListStockflowTradeHistoryUrl = () => {
+
+
+
+
+  return `/api/stockflow/trading/history`
+}
+
+export const listStockflowTradeHistory = async ( options?: RequestInit): Promise<StockflowTradeRecord[]> => {
+
+  return customFetch<StockflowTradeRecord[]>(getListStockflowTradeHistoryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStockflowTradeHistoryQueryKey = () => {
+    return [
+    `/api/stockflow/trading/history`
+    ] as const;
+    }
+
+
+export const getListStockflowTradeHistoryQueryOptions = <TData = Awaited<ReturnType<typeof listStockflowTradeHistory>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockflowTradeHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStockflowTradeHistoryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStockflowTradeHistory>>> = ({ signal }) => listStockflowTradeHistory({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStockflowTradeHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStockflowTradeHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof listStockflowTradeHistory>>>
+export type ListStockflowTradeHistoryQueryError = ErrorType<unknown>
+
+
+
+export function useListStockflowTradeHistory<TData = Awaited<ReturnType<typeof listStockflowTradeHistory>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockflowTradeHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStockflowTradeHistoryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRecordStockflowTradeUrl = () => {
+
+
+
+
+  return `/api/stockflow/trading/history`
+}
+
+export const recordStockflowTrade = async (stockflowTradeSubmission: StockflowTradeSubmission, options?: RequestInit): Promise<StockflowTradeRecord> => {
+
+  return customFetch<StockflowTradeRecord>(getRecordStockflowTradeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      stockflowTradeSubmission,)
+  }
+);}
+
+
+
+
+export const getRecordStockflowTradeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordStockflowTrade>>, TError,{data: BodyType<StockflowTradeSubmission>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordStockflowTrade>>, TError,{data: BodyType<StockflowTradeSubmission>}, TContext> => {
+
+const mutationKey = ['recordStockflowTrade'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordStockflowTrade>>, {data: BodyType<StockflowTradeSubmission>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recordStockflowTrade(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordStockflowTradeMutationResult = NonNullable<Awaited<ReturnType<typeof recordStockflowTrade>>>
+    export type RecordStockflowTradeMutationBody = BodyType<StockflowTradeSubmission>
+    export type RecordStockflowTradeMutationError = ErrorType<unknown>
+
+    export const useRecordStockflowTrade = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordStockflowTrade>>, TError,{data: BodyType<StockflowTradeSubmission>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordStockflowTrade>>,
+        TError,
+        {data: BodyType<StockflowTradeSubmission>},
+        TContext
+      > => {
+      return useMutation(getRecordStockflowTradeMutationOptions(options));
+    }
+
+export const getListStockflowStocksUrl = () => {
+
+
+
+
+  return `/api/stockflow/stocks`
+}
+
+/**
+ * @summary Live Coinbase tokenized stock reference catalogue, not trade quotes
+ */
+export const listStockflowStocks = async ( options?: RequestInit): Promise<StockflowCatalogue> => {
+
+  return customFetch<StockflowCatalogue>(getListStockflowStocksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStockflowStocksQueryKey = () => {
+    return [
+    `/api/stockflow/stocks`
+    ] as const;
+    }
+
+
+export const getListStockflowStocksQueryOptions = <TData = Awaited<ReturnType<typeof listStockflowStocks>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockflowStocks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStockflowStocksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStockflowStocks>>> = ({ signal }) => listStockflowStocks({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStockflowStocks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStockflowStocksQueryResult = NonNullable<Awaited<ReturnType<typeof listStockflowStocks>>>
+export type ListStockflowStocksQueryError = ErrorType<void>
+
+
+/**
+ * @summary Live Coinbase tokenized stock reference catalogue, not trade quotes
+ */
+
+export function useListStockflowStocks<TData = Awaited<ReturnType<typeof listStockflowStocks>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStockflowStocks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStockflowStocksQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetStockflowPositionsUrl = (wallet: string,) => {
+
+
+
+
+  return `/api/stockflow/positions/${wallet}`
+}
+
+/**
+ * @summary Read public Base balances for catalogue stocks
+ */
+export const getStockflowPositions = async (wallet: string, options?: RequestInit): Promise<StockflowPositions> => {
+
+  return customFetch<StockflowPositions>(getGetStockflowPositionsUrl(wallet),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStockflowPositionsQueryKey = (wallet: string,) => {
+    return [
+    `/api/stockflow/positions/${wallet}`
+    ] as const;
+    }
+
+
+export const getGetStockflowPositionsQueryOptions = <TData = Awaited<ReturnType<typeof getStockflowPositions>>, TError = ErrorType<void>>(wallet: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockflowPositions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStockflowPositionsQueryKey(wallet);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStockflowPositions>>> = ({ signal }) => getStockflowPositions(wallet, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(wallet), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStockflowPositions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStockflowPositionsQueryResult = NonNullable<Awaited<ReturnType<typeof getStockflowPositions>>>
+export type GetStockflowPositionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Read public Base balances for catalogue stocks
+ */
+
+export function useGetStockflowPositions<TData = Awaited<ReturnType<typeof getStockflowPositions>>, TError = ErrorType<void>>(
+ wallet: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockflowPositions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStockflowPositionsQueryOptions(wallet,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetStockflowIncomeUrl = (wallet: string,
+    params: GetStockflowIncomeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/stockflow/income/${wallet}?${stringifiedParams}` : `/api/stockflow/income/${wallet}`
+}
+
+export const getStockflowIncome = async (wallet: string,
+    params: GetStockflowIncomeParams, options?: RequestInit): Promise<StockflowIncome> => {
+
+  return customFetch<StockflowIncome>(getGetStockflowIncomeUrl(wallet,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStockflowIncomeQueryKey = (wallet: string,
+    params?: GetStockflowIncomeParams,) => {
+    return [
+    `/api/stockflow/income/${wallet}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetStockflowIncomeQueryOptions = <TData = Awaited<ReturnType<typeof getStockflowIncome>>, TError = ErrorType<StockflowErrorResponse>>(wallet: string,
+    params: GetStockflowIncomeParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockflowIncome>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStockflowIncomeQueryKey(wallet,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStockflowIncome>>> = ({ signal }) => getStockflowIncome(wallet,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(wallet), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStockflowIncome>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStockflowIncomeQueryResult = NonNullable<Awaited<ReturnType<typeof getStockflowIncome>>>
+export type GetStockflowIncomeQueryError = ErrorType<StockflowErrorResponse>
+
+
+
+export function useGetStockflowIncome<TData = Awaited<ReturnType<typeof getStockflowIncome>>, TError = ErrorType<StockflowErrorResponse>>(
+ wallet: string,
+    params: GetStockflowIncomeParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStockflowIncome>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStockflowIncomeQueryOptions(wallet,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSetStockflowIncomePolicyUrl = (wallet: string,) => {
+
+
+
+
+  return `/api/stockflow/income/${wallet}`
+}
+
+export const setStockflowIncomePolicy = async (wallet: string,
+    stockflowIncomePolicyInput: StockflowIncomePolicyInput, options?: RequestInit): Promise<StockflowIncome> => {
+
+  return customFetch<StockflowIncome>(getSetStockflowIncomePolicyUrl(wallet),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      stockflowIncomePolicyInput,)
+  }
+);}
+
+
+
+
+export const getSetStockflowIncomePolicyMutationOptions = <TError = ErrorType<StockflowErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setStockflowIncomePolicy>>, TError,{wallet: string;data: BodyType<StockflowIncomePolicyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setStockflowIncomePolicy>>, TError,{wallet: string;data: BodyType<StockflowIncomePolicyInput>}, TContext> => {
+
+const mutationKey = ['setStockflowIncomePolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setStockflowIncomePolicy>>, {wallet: string;data: BodyType<StockflowIncomePolicyInput>}> = (props) => {
+          const {wallet,data} = props ?? {};
+
+          return  setStockflowIncomePolicy(wallet,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetStockflowIncomePolicyMutationResult = NonNullable<Awaited<ReturnType<typeof setStockflowIncomePolicy>>>
+    export type SetStockflowIncomePolicyMutationBody = BodyType<StockflowIncomePolicyInput>
+    export type SetStockflowIncomePolicyMutationError = ErrorType<StockflowErrorResponse>
+
+    export const useSetStockflowIncomePolicy = <TError = ErrorType<StockflowErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setStockflowIncomePolicy>>, TError,{wallet: string;data: BodyType<StockflowIncomePolicyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setStockflowIncomePolicy>>,
+        TError,
+        {wallet: string;data: BodyType<StockflowIncomePolicyInput>},
+        TContext
+      > => {
+      return useMutation(getSetStockflowIncomePolicyMutationOptions(options));
+    }
+
+export const getSyncStockflowIncomeUrl = (wallet: string,) => {
+
+
+
+
+  return `/api/stockflow/income/${wallet}/sync`
+}
+
+export const syncStockflowIncome = async (wallet: string,
+    stockflowIncomeSyncInput: StockflowIncomeSyncInput, options?: RequestInit): Promise<StockflowIncome> => {
+
+  return customFetch<StockflowIncome>(getSyncStockflowIncomeUrl(wallet),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      stockflowIncomeSyncInput,)
+  }
+);}
+
+
+
+
+export const getSyncStockflowIncomeMutationOptions = <TError = ErrorType<StockflowErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncStockflowIncome>>, TError,{wallet: string;data: BodyType<StockflowIncomeSyncInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncStockflowIncome>>, TError,{wallet: string;data: BodyType<StockflowIncomeSyncInput>}, TContext> => {
+
+const mutationKey = ['syncStockflowIncome'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncStockflowIncome>>, {wallet: string;data: BodyType<StockflowIncomeSyncInput>}> = (props) => {
+          const {wallet,data} = props ?? {};
+
+          return  syncStockflowIncome(wallet,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncStockflowIncomeMutationResult = NonNullable<Awaited<ReturnType<typeof syncStockflowIncome>>>
+    export type SyncStockflowIncomeMutationBody = BodyType<StockflowIncomeSyncInput>
+    export type SyncStockflowIncomeMutationError = ErrorType<StockflowErrorResponse>
+
+    export const useSyncStockflowIncome = <TError = ErrorType<StockflowErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncStockflowIncome>>, TError,{wallet: string;data: BodyType<StockflowIncomeSyncInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncStockflowIncome>>,
+        TError,
+        {wallet: string;data: BodyType<StockflowIncomeSyncInput>},
+        TContext
+      > => {
+      return useMutation(getSyncStockflowIncomeMutationOptions(options));
+    }
+
+export const getReviewStockflowProposalUrl = (wallet: string,
+    id: string,) => {
+
+
+
+
+  return `/api/stockflow/income/${wallet}/proposals/${id}`
+}
+
+export const reviewStockflowProposal = async (wallet: string,
+    id: string,
+    stockflowProposalReviewInput: StockflowProposalReviewInput, options?: RequestInit): Promise<StockflowIncome> => {
+
+  return customFetch<StockflowIncome>(getReviewStockflowProposalUrl(wallet,id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      stockflowProposalReviewInput,)
+  }
+);}
+
+
+
+
+export const getReviewStockflowProposalMutationOptions = <TError = ErrorType<StockflowErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewStockflowProposal>>, TError,{wallet: string;id: string;data: BodyType<StockflowProposalReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewStockflowProposal>>, TError,{wallet: string;id: string;data: BodyType<StockflowProposalReviewInput>}, TContext> => {
+
+const mutationKey = ['reviewStockflowProposal'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewStockflowProposal>>, {wallet: string;id: string;data: BodyType<StockflowProposalReviewInput>}> = (props) => {
+          const {wallet,id,data} = props ?? {};
+
+          return  reviewStockflowProposal(wallet,id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewStockflowProposalMutationResult = NonNullable<Awaited<ReturnType<typeof reviewStockflowProposal>>>
+    export type ReviewStockflowProposalMutationBody = BodyType<StockflowProposalReviewInput>
+    export type ReviewStockflowProposalMutationError = ErrorType<StockflowErrorResponse>
+
+    export const useReviewStockflowProposal = <TError = ErrorType<StockflowErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewStockflowProposal>>, TError,{wallet: string;id: string;data: BodyType<StockflowProposalReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewStockflowProposal>>,
+        TError,
+        {wallet: string;id: string;data: BodyType<StockflowProposalReviewInput>},
+        TContext
+      > => {
+      return useMutation(getReviewStockflowProposalMutationOptions(options));
+    }
 
 export const getHealthCheckUrl = () => {
 

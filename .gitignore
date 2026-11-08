@@ -51,4 +51,9 @@ Thumbs.db
 
 # Replit
 .cache/
+
+# Local build/test output and the separately authorized one-off signer.
+/generated-artifacts/
+/artifacts/api-server/test/stockflow-mainnet.authorized.ts
+/artifacts/base-pay/src/lib/stockflow-sandbox.json
 .local/

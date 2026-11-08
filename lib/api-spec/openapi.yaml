@@ -22,7 +22,296 @@ tags:
   - name: swap
     description: Gasless USDC↔EURC swaps via Aerodrome Finance + EIP-2612 permit relayer
 
+  - name: stockflow
+    description: Stock reference data, reviewed pilot trading and income proposals
+
 paths:
+  /stockflow/pilot/session:
+    get:
+      operationId: getStockflowPilotSession
+      tags: [stockflow]
+      responses:
+        "200":
+          description: Wallet session and current pilot access, checked afresh
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockflowPilotSession" }
+  /stockflow/pilot/challenge:
+    post:
+      operationId: createStockflowPilotChallenge
+      tags: [stockflow]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address]
+              properties:
+                address: { type: string }
+      responses:
+        "200":
+          description: Single-use sign-in challenge
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, message]
+                properties:
+                  id: { type: string }
+                  message: { type: string }
+  /stockflow/pilot/auth:
+    post:
+      operationId: authenticateStockflowPilot
+      tags: [stockflow]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address, challengeId, signature]
+              properties:
+                address: { type: string }
+                challengeId: { type: string }
+                signature: { type: string }
+      responses:
+        "200":
+          description: HttpOnly wallet session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockflowPilotSession" }
+  /stockflow/pilot/logout:
+    post:
+      operationId: logoutStockflowPilot
+      tags: [stockflow]
+      responses:
+        "200":
+          description: Session ended
+          content:
+            application/json:
+              schema: { type: object, required: [success], properties: { success: { type: boolean } } }
+  /stockflow/pilot/participants:
+    get:
+      operationId: listStockflowPilotParticipants
+      tags: [stockflow]
+      responses:
+        "200":
+          description: Administrator-only participant approvals
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/StockflowPilotParticipant" } }
+    post:
+      operationId: saveStockflowPilotParticipant
+      tags: [stockflow]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [wallet, countryCode, days, approved, reviewConfirmed]
+              properties:
+                wallet: { type: string }
+                countryCode: { type: string }
+                days: { type: integer, minimum: 1, maximum: 30 }
+                approved: { type: boolean }
+                reviewConfirmed: { type: boolean }
+      responses:
+        "200":
+          description: Persisted approval or revocation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockflowPilotParticipant" }
+  /stockflow/trading/quote:
+    post:
+      operationId: createStockflowTradeQuote
+      tags: [stockflow]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stockAddress, side, amount, slippageBps]
+              properties:
+                stockAddress: { type: string }
+                side: { type: string, enum: [buy, sell] }
+                amount:
+                  type: string
+                  description: Human-readable input quantity, USDC for buys or stock tokens for sells. Never raw integer units.
+                  example: "0.1"
+                slippageBps: { type: integer, minimum: 10, maximum: 100 }
+      responses:
+        "200":
+          description: Real Aerodrome mainnet quote, not an NAV estimate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockflowTradeQuote" }
+  /stockflow/trading/prepare:
+    post:
+      operationId: prepareStockflowTrade
+      tags: [stockflow]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [quoteId], properties: { quoteId: { type: string } } }
+      responses:
+        "200":
+          description: Rechecks access, balance, allowance and transaction simulation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [quote, balance, allowance, approvalRequired, simulated]
+                properties:
+                  quote: { $ref: "#/components/schemas/StockflowTradeQuote" }
+                  balance: { type: string }
+                  allowance: { type: string }
+                  approvalRequired: { type: boolean }
+                  simulated: { type: boolean }
+  /stockflow/trading/history:
+    get:
+      operationId: listStockflowTradeHistory
+      tags: [stockflow]
+      responses:
+        "200":
+          description: Current wallet's recorded trades, with chain-verified receipt status
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/StockflowTradeRecord" } }
+    post:
+      operationId: recordStockflowTrade
+      tags: [stockflow]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockflowTradeSubmission"
+      responses:
+        "200":
+          description: Transaction sender, target and calldata checked against stored quote
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockflowTradeRecord" }
+  /stockflow/stocks:
+    get:
+      operationId: listStockflowStocks
+      tags: [stockflow]
+      summary: Live Coinbase tokenized stock reference catalogue, not trade quotes
+      responses:
+        "200":
+          description: Reference data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockflowCatalogue"
+        "503":
+          description: Upstream reference data unavailable
+  /stockflow/positions/{wallet}:
+    get:
+      operationId: getStockflowPositions
+      tags: [stockflow]
+      summary: Read public Base balances for catalogue stocks
+      parameters:
+        - in: path
+          name: wallet
+          required: true
+          schema:
+            type: string
+            pattern: "^0x[a-fA-F0-9]{40}$"
+      responses:
+        "200":
+          description: Onchain balances; failures are reported explicitly
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockflowPositions"
+        "400":
+          description: Invalid wallet
+        "503":
+          description: RPC or catalogue unavailable
+  /stockflow/income/{wallet}:
+    parameters:
+      - $ref: "#/components/parameters/StockflowWallet"
+    get:
+      operationId: getStockflowIncome
+      tags: [stockflow]
+      parameters:
+        - $ref: "#/components/parameters/StockflowSignature"
+        - $ref: "#/components/parameters/StockflowTimestamp"
+      responses:
+        "200":
+          description: Persisted wallet-scoped receipts, policy snapshot and proposals. Never executes trades.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockflowIncome" }
+        "400": { $ref: "#/components/responses/StockflowError" }
+        "401": { $ref: "#/components/responses/StockflowError" }
+    put:
+      operationId: setStockflowIncomePolicy
+      tags: [stockflow]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StockflowIncomePolicyInput" }
+      responses:
+        "200":
+          description: Saved income-planning policy; null pauses new proposals.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockflowIncome" }
+        "400": { $ref: "#/components/responses/StockflowError" }
+        "401": { $ref: "#/components/responses/StockflowError" }
+  /stockflow/income/{wallet}/sync:
+    parameters:
+      - $ref: "#/components/parameters/StockflowWallet"
+    post:
+      operationId: syncStockflowIncome
+      tags: [stockflow]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StockflowIncomeSyncInput" }
+      responses:
+        "200":
+          description: Read-only Base ingestion, canonicality checks and idempotent proposal generation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockflowIncome" }
+        "400": { $ref: "#/components/responses/StockflowError" }
+        "401": { $ref: "#/components/responses/StockflowError" }
+        "503": { $ref: "#/components/responses/StockflowError" }
+  /stockflow/income/{wallet}/proposals/{id}:
+    parameters:
+      - $ref: "#/components/parameters/StockflowWallet"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 250 }
+    patch:
+      operationId: reviewStockflowProposal
+      tags: [stockflow]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StockflowProposalReviewInput" }
+      responses:
+        "200":
+          description: Records a human review decision only. No trade or authorization is created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockflowIncome" }
+        "400": { $ref: "#/components/responses/StockflowError" }
+        "401": { $ref: "#/components/responses/StockflowError" }
+        "404": { $ref: "#/components/responses/StockflowError" }
+        "409": { $ref: "#/components/responses/StockflowError" }
+        "503": { $ref: "#/components/responses/StockflowError" }
   /healthz:
     get:
       operationId: healthCheck
@@ -351,7 +640,296 @@ paths:
                 $ref: "#/components/schemas/AppConfig"
 
 components:
+  parameters:
+    StockflowWallet:
+      name: wallet
+      in: path
+      required: true
+      schema: { type: string, pattern: "^0x[0-9a-fA-F]{40}$" }
+    StockflowSignature:
+      name: signature
+      in: query
+      required: true
+      schema: { type: string, pattern: "^0x[0-9a-fA-F]+$", maxLength: 4096 }
+    StockflowTimestamp:
+      name: timestamp
+      in: query
+      required: true
+      schema: { type: integer }
+  responses:
+    StockflowError:
+      description: Invalid request, wallet proof, state conflict or unavailable chain data.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
   schemas:
+    StockflowPilotParticipant:
+      type: object
+      required: [wallet, countryCode, approved, expiresAt, reviewedBy, updatedAt]
+      properties:
+        wallet: { type: string }
+        countryCode: { type: string }
+        approved: { type: boolean }
+        expiresAt: { type: string }
+        reviewedBy: { type: string }
+        updatedAt: { type: string }
+    StockflowPilotSession:
+      type: object
+      required: [authenticated, address, isAdmin, enabled, approved, reason, participant]
+      properties:
+        authenticated: { type: boolean }
+        address: { type: [string, "null"] }
+        isAdmin: { type: boolean }
+        enabled: { type: boolean }
+        approved: { type: boolean }
+        reason: { type: string }
+        participant:
+          anyOf:
+            - { $ref: "#/components/schemas/StockflowPilotParticipant" }
+            - { type: "null" }
+    StockflowTradeQuote:
+      type: object
+      required: [id, chainId, wallet, stockAddress, symbol, side, router, factory, pool, tickSpacing, tokenIn, tokenOut, decimalsIn, decimalsOut, amountIn, amountOut, minimumOut, slippageBps, priceImpactBps, expiresAt, deadline, blockNumber]
+      properties:
+        id: { type: string }
+        chainId: { type: integer }
+        wallet: { type: string }
+        stockAddress: { type: string }
+        symbol: { type: string }
+        side: { type: string, enum: [buy, sell] }
+        router: { type: string }
+        factory: { type: string }
+        pool: { type: string }
+        tickSpacing: { type: integer }
+        tokenIn: { type: string }
+        tokenOut: { type: string }
+        decimalsIn: { type: integer }
+        decimalsOut: { type: integer }
+        amountIn: { type: string }
+        amountOut: { type: string }
+        minimumOut: { type: string }
+        slippageBps: { type: integer }
+        priceImpactBps: { type: integer }
+        expiresAt: { type: string }
+        deadline: { type: integer }
+        blockNumber: { type: string }
+    StockflowTradeSubmission:
+      type: object
+      required: [quoteId, hash]
+      properties:
+        quoteId: { type: string }
+        hash: { type: string, pattern: "^0x[a-fA-F0-9]{64}$" }
+        replacementHashes:
+          type: array
+          maxItems: 20
+          items: { type: string, pattern: "^0x[a-fA-F0-9]{64}$" }
+        reviewedSwapFee:
+          description: Client-reported estimate reviewed before signing, not an authoritative paid fee.
+          anyOf:
+            - { $ref: "#/components/schemas/StockflowNetworkFee" }
+            - { type: "null" }
+    StockflowNetworkFee:
+      type: object
+      description: Network cost in decimal wei strings. Null means unavailable, never zero. Excludes pool and service fees.
+      required: [executionWei, l1DataWei, operatorWei, totalWei]
+      properties:
+        executionWei: { type: [string, "null"], pattern: "^[0-9]{1,78}$" }
+        l1DataWei: { type: [string, "null"], pattern: "^[0-9]{1,78}$" }
+        operatorWei: { type: [string, "null"], pattern: "^[0-9]{1,78}$" }
+        totalWei: { type: [string, "null"], pattern: "^[0-9]{1,78}$" }
+    StockflowTradeRecord:
+      type: object
+      required: [hash, originalHash, replacementHashes, quoteId, symbol, side, status, amountIn, amountOut, decimalsIn, decimalsOut, createdAt]
+      properties:
+        hash: { type: string }
+        originalHash: { type: string }
+        replacementHashes:
+          type: array
+          items: { type: string }
+        quoteId: { type: string }
+        symbol: { type: string }
+        side: { type: string, enum: [buy, sell] }
+        status: { type: string, enum: [pending, confirmed, failed, cancelled, changed] }
+        amountIn: { type: string }
+        amountOut: { type: [string, "null"] }
+        networkFees:
+          anyOf:
+            - { $ref: "#/components/schemas/StockflowNetworkFee" }
+            - { type: "null" }
+        reviewedSwapFee:
+          anyOf:
+            - { $ref: "#/components/schemas/StockflowNetworkFee" }
+            - { type: "null" }
+        decimalsIn: { type: integer }
+        decimalsOut: { type: integer }
+        createdAt: { type: string }
+    StockflowAllocation:
+      type: object
+      required: [address, symbol, weight]
+      properties:
+        address: { type: string, pattern: "^0x[0-9a-fA-F]{40}$" }
+        symbol: { type: string, minLength: 1, maxLength: 30 }
+        weight: { type: number, exclusiveMinimum: 0, maximum: 100 }
+    StockflowIncomePolicy:
+      type: object
+      required: [id, name, incomePct, maxPerPurchase, dailyMax, expiresAt, allocations, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 100 }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        incomePct: { type: number, exclusiveMinimum: 0, maximum: 100 }
+        maxPerPurchase: { type: number, exclusiveMinimum: 0, maximum: 1000000000 }
+        dailyMax: { type: number, exclusiveMinimum: 0, maximum: 1000000000 }
+        expiresAt: { type: number }
+        status: { type: string, enum: [active, revoked] }
+        createdAt: { type: number }
+        updatedAt: { type: number }
+        allocations:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { $ref: "#/components/schemas/StockflowAllocation" }
+    StockflowIncomePolicyInput:
+      type: object
+      required: [policy, signature, timestamp]
+      properties:
+        policy:
+          oneOf:
+            - $ref: "#/components/schemas/StockflowIncomePolicy"
+            - { type: "null" }
+        signature: { type: string, maxLength: 4096 }
+        timestamp: { type: integer }
+    StockflowIncomeSyncInput:
+      type: object
+      required: [signature, timestamp]
+      properties:
+        signature: { type: string, maxLength: 4096 }
+        timestamp: { type: integer }
+        txHash:
+          type: string
+          pattern: "^0x[0-9a-fA-F]{64}$"
+          description: Optional historical transaction to verify, outside the automatic scan window.
+    StockflowProposalReviewInput:
+      type: object
+      required: [status, signature, timestamp]
+      properties:
+        status: { type: string, enum: [reviewed, dismissed] }
+        signature: { type: string, maxLength: 4096 }
+        timestamp: { type: integer }
+    StockflowIncomeReceipt:
+      type: object
+      required: [id, txHash, logIndex, receiptIndex, token, tokenAddress, amountAtomic, sender, blockNumber, blockHash, receivedAt, confirmations, status, paymentRequestIds]
+      properties:
+        id: { type: string }
+        txHash: { type: string }
+        logIndex: { type: integer }
+        receiptIndex:
+          type: integer
+          description: Stable transaction-local log offset used for identity across reorgs.
+        token: { type: string, enum: [USDC, EURC] }
+        tokenAddress: { type: string }
+        amountAtomic: { type: string, pattern: "^[0-9]+$" }
+        sender: { type: string }
+        blockNumber: { type: string }
+        blockHash: { type: string }
+        receivedAt: { type: string }
+        confirmations: { type: integer }
+        status: { type: string, enum: [confirming, confirmed, orphaned] }
+        paymentRequestIds:
+          type: array
+          items: { type: string }
+    StockflowProposalLine:
+      type: object
+      required: [address, symbol, amountUsd]
+      properties:
+        address: { type: string }
+        symbol: { type: string }
+        amountUsd: { type: string }
+    StockflowIncomeProposal:
+      type: object
+      required: [id, receiptId, policy, totalUsd, lines, status, reason, createdAt, reviewedAt]
+      properties:
+        id: { type: string }
+        receiptId: { type: string }
+        policy: { $ref: "#/components/schemas/StockflowIncomePolicy" }
+        totalUsd: { type: string }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/StockflowProposalLine" }
+        status: { type: string, enum: [pending_review, reviewed, dismissed, invalidated, blocked] }
+        reason: { type: ["string", "null"] }
+        createdAt: { type: string }
+        reviewedAt: { type: ["string", "null"] }
+    StockflowIncome:
+      type: object
+      required: [wallet, chainId, requiredConfirmations, policy, receipts, proposals, scanStartBlock, scannedThroughBlock, scannedBlockHash, headBlock, syncedAt]
+      properties:
+        wallet: { type: string }
+        chainId: { type: integer }
+        requiredConfirmations: { type: integer }
+        policy:
+          oneOf:
+            - $ref: "#/components/schemas/StockflowIncomePolicy"
+            - { type: "null" }
+        receipts:
+          type: array
+          items: { $ref: "#/components/schemas/StockflowIncomeReceipt" }
+        proposals:
+          type: array
+          items: { $ref: "#/components/schemas/StockflowIncomeProposal" }
+        scanStartBlock: { type: ["string", "null"] }
+        scannedThroughBlock: { type: ["string", "null"] }
+        scannedBlockHash: { type: ["string", "null"] }
+        headBlock: { type: ["string", "null"] }
+        syncedAt: { type: ["string", "null"] }
+    StockflowStock:
+      type: object
+      required: [address, symbol, name, decimals, multiplier, referencePrice, priceUpdatedAt, iconUrl, pausedFeatures]
+      properties:
+        address: { type: string }
+        symbol: { type: string }
+        name: { type: string }
+        decimals: { type: integer }
+        multiplier: { type: ["number", "null"] }
+        referencePrice: { type: ["number", "null"] }
+        priceUpdatedAt: { type: ["string", "null"] }
+        iconUrl: { type: ["string", "null"] }
+        pausedFeatures:
+          type: array
+          items: { type: string }
+    StockflowCatalogue:
+      type: object
+      required: [stocks, fetchedAt, source, chainId]
+      properties:
+        stocks:
+          type: array
+          items: { $ref: "#/components/schemas/StockflowStock" }
+        fetchedAt: { type: string }
+        source: { type: string }
+        chainId: { type: integer }
+    StockflowPosition:
+      type: object
+      required: [address, rawBalance, tokenBalance, shareBalance, referenceValue]
+      properties:
+        address: { type: string }
+        rawBalance: { type: string }
+        tokenBalance: { type: string }
+        shareBalance: { type: ["string", "null"] }
+        referenceValue: { type: ["number", "null"] }
+    StockflowPositions:
+      type: object
+      required: [wallet, positions, failedReads, fetchedAt, blockNumber]
+      properties:
+        wallet: { type: string }
+        positions:
+          type: array
+          items: { $ref: "#/components/schemas/StockflowPosition" }
+        failedReads: { type: integer }
+        fetchedAt: { type: string }
+        blockNumber: { type: string }
     HealthStatus:
       type: object
       required: [status]

@@ -49,6 +49,13 @@ Current pilot bounds are **100 USDC per quote**, 0.1–1% slippage, a 45-second
 quote lifetime and a 60-second swap deadline. These are not a daily onchain
 budget. Not every catalogue asset has a supported executable pool.
 
+## Source code
+
+The source-code publication adds the implementation described here without
+importing workspace history or deploying it. See
+[source publication and setup](source-publication.md) for the exact boundary,
+schema/configuration requirements and unfunded verification results.
+
 ## Evidence and deployment status
 
 On 8 November 2026, an explicitly authorized test bought **0.00053199 NVDAc for
